@@ -1,6 +1,7 @@
 use std::net;
 use std::error;
-use std::str;
+
+mod dns;
 
 // Make Result<T> an alias for a result with a boxed error in it. This lets
 // us write methods that return multiple different types of errors more easily,
@@ -8,20 +9,24 @@ use std::str;
 type Result<T> = std::result::Result<T, Box<error::Error>>;
 
 // Main server thread entry point. Listens for a connection on
-// localhost (127.0.0.1) UDP port 5300 and reads up to 50 bytes
+// localhost (127.0.0.1) UDP port 5300 and reads up to 500 bytes
 fn listen_once()  -> Result<()> {
     // First, open the UDP socket
     println!("Listening for UDP connection");
     let socket = net::UdpSocket::bind("127.0.0.1:5300")?;
 
-    // Receive data from the user. For now, let's read in an arbitrary UTF-8
-    // string and send it back out, like a networking "hello world"
-    let mut buf = [0; 50];
-    let (amt, source) = socket.recv_from(&mut buf)?;
-    let username = str::from_utf8(&buf).expect("Data sent was not valid UTF-8");
-
+    // Receive data from the user.
+    // TODO(dylan): Up MTU, consider using an alloc here
+    let mut buf = [0; 500];
+    let (amt, _) = socket.recv_from(&mut buf)?;
     println!("Data received: {} bytes", amt);
-    socket.send_to(format!("Hello {}", username).as_bytes(), &source)?;
+
+    // Process the DNS packet received and print out some data from it
+    let packet = dns::process_packet_bytes(&buf)?;
+    dns::print_packet(&packet);
+
+    println!("All done!");
+
     Ok(())
 }
 

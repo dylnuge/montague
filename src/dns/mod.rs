@@ -2,7 +2,11 @@
 // others that have made updates to it. I've put comments where the element
 // isn't coming directly from RFC 1035.
 // See: https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml
-struct DnsPacket {
+
+// *** STRUCTURES AND ENUMS ***
+
+#[allow(dead_code)]
+pub struct DnsPacket {
     // DNS transaction ID is a 16 bit number. It's arbitrary when transmitted
     // and copied into the reply so the client knows which replies correspond
     // to which requests if it's asking the same DNS server multiple questions.
@@ -22,7 +26,8 @@ struct DnsPacket {
     addl_records: Vec<DnsResourceRecord>,
 }
 
-struct DnsFlags {
+#[allow(dead_code)]
+pub struct DnsFlags {
     // Query/Response: True if this is a response, false if it is a query
     qr_bit: bool,
     // Opcode: A four bit field indicating the DNS operation being performed
@@ -54,15 +59,18 @@ struct DnsFlags {
     rcode: DnsRCode
 }
 
-struct DnsQuestion {
+#[allow(dead_code)]
+pub struct DnsQuestion {
     // TODO(dylan): implement
 }
 
-struct DnsResourceRecord {
+#[allow(dead_code)]
+pub struct DnsResourceRecord {
     // TODO(dylan): implement
 }
 
-enum DnsOpcode {
+#[allow(dead_code)]
+pub enum DnsOpcode {
     // Opcode 0: standard query
     Query,
     // Opcode 1: inverse query (obsoleted by RFC 3425)
@@ -79,14 +87,15 @@ enum DnsOpcode {
     // 7-15 reserved for future use
 }
 
-enum DnsRCode {
+#[allow(dead_code)]
+pub enum DnsRCode {
     // 0: No error
     NoError,
     // 1: Format error - NS couldn't interpret query
     FormError,
     // 2: Server failure - NS couldn't process query
     ServFail,
-    // 3: NX Domain - The domain does not exist
+    // 3: Name error - The domain does not exist
     NXDomain,
     // 4: Not Implemented - The requested operation can't be done by this NS
     NotImp,
@@ -106,3 +115,54 @@ enum DnsRCode {
     // RFCs implement them)
 }
 
+// *** PUBLIC FUNCTIONS ***
+
+// Converts raw bytes into a DnsPacket struct
+// TODO(dylan): real errors instead of strings
+pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<DnsPacket, String> {
+    let id: u16;
+    // TODO(dylan) remove default values
+    let flags: DnsFlags = DnsFlags{
+        qr_bit: false,
+        opcode: DnsOpcode::Query,
+        aa_bit: false,
+        tc_bit: false,
+        rd_bit: false,
+        ra_bit: false,
+        z: false,
+        ad_bit: false,
+        cd_bit: false,
+        rcode: DnsRCode::NoError,
+    };
+    let qd_count: u16 = 0;
+    let an_count: u16 = 0;
+    let ns_count: u16 = 0;
+    let ar_count: u16 = 0;
+    let mut questions: Vec<DnsQuestion> = Vec::new();
+    let mut answers: Vec<DnsResourceRecord> = Vec::new();
+    let mut ns_records: Vec<DnsResourceRecord> = Vec::new();
+    let mut addl_records: Vec<DnsResourceRecord>= Vec::new();
+
+    // Read the first 2 bytes as a big-endian u16 containing transaction id
+    id = parse_big_endian_bytes_to_u16(&packet_bytes[0..2]);
+
+    Ok(DnsPacket{
+        id, flags, qd_count, an_count, ns_count,
+        ar_count, questions, answers, ns_records, addl_records,
+    })
+}
+
+// Debug function which prints data from packets out
+pub fn print_packet(packet: &DnsPacket) {
+    println!("id: {}", packet.id);
+}
+
+// *** PRIVATE FUNCTIONS ***
+// Parse the next two bytes in the passed slice into a u16, assuming they're
+// encoded big-endian (network byte order)
+// TODO(dylan): there's probably more idiomatic ways of handling byte
+// conversions in Rust. As is, this function isn't even checking if the slice
+// passed to it is the right size.
+fn parse_big_endian_bytes_to_u16(bytes: &[u8]) -> u16 {
+    ((bytes[0] as u16) << 8) + (bytes[1] as u16)
+}
