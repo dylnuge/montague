@@ -47,12 +47,12 @@ pub struct DnsFlags {
     // The next bit is the Z field, which is reserved and should be zero.
     z: bool,
     // TODO(dylan): Better understand/document next two DNSSEC flags
-    // Authenticated Data: Part of DNSSEC (RFC 4035 and others). Indicates that
-    // DNSSEC was used to authenticate all responses. Only relevant when
+    // Authenticated Data: Part of DNSSEC (RFC 2535, 4035 and others). Indicates
+    // that DNSSEC was used to authenticate all responses. Only relevant when
     // communicating with trusted nameservers.
     ad_bit: bool,
-    // Checking Disabled: Also DNSSEC (RFC 4035 and others). Indicates DNSSEC
-    // should not be used/was not used in serving this response
+    // Checking Disabled: Also DNSSEC (RFC 2535, 4035 and others). Indicates
+    // DNSSEC should not be used/was not used in serving this response
     cd_bit: bool,
     // RCode: A four bit field indicating the status of a response.
     // Undefined/ignored in queries.
@@ -121,19 +121,8 @@ pub enum DnsRCode {
 // TODO(dylan): real errors instead of strings
 pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<DnsPacket, String> {
     let id: u16;
+    let flags: DnsFlags;
     // TODO(dylan) remove default values
-    let flags: DnsFlags = DnsFlags{
-        qr_bit: false,
-        opcode: DnsOpcode::Query,
-        aa_bit: false,
-        tc_bit: false,
-        rd_bit: false,
-        ra_bit: false,
-        z: false,
-        ad_bit: false,
-        cd_bit: false,
-        rcode: DnsRCode::NoError,
-    };
     let qd_count: u16 = 0;
     let an_count: u16 = 0;
     let ns_count: u16 = 0;
@@ -143,8 +132,11 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<DnsPacket, String> {
     let mut ns_records: Vec<DnsResourceRecord> = Vec::new();
     let mut addl_records: Vec<DnsResourceRecord>= Vec::new();
 
-    // Read the first 2 bytes as a big-endian u16 containing transaction id
+    // TODO(dylan): Error checking, e.g. DNS request too short
+    // Read the first two bytes as a big-endian u16 containing transaction id
     id = parse_big_endian_bytes_to_u16(&packet_bytes[0..2]);
+    // Next two bytes are flags
+    flags = parse_dns_flags(&packet_bytes[2..4]);
 
     Ok(DnsPacket{
         id, flags, qd_count, an_count, ns_count,
@@ -155,6 +147,12 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<DnsPacket, String> {
 // Debug function which prints data from packets out
 pub fn print_packet(packet: &DnsPacket) {
     println!("id: {}", packet.id);
+    println!("qr: {}, aa: {}, tc: {}, rd: {}, ra: {}",
+             packet.flags.qr_bit,
+             packet.flags.aa_bit,
+             packet.flags.tc_bit,
+             packet.flags.rd_bit,
+             packet.flags.ra_bit)
 }
 
 // *** PRIVATE FUNCTIONS ***
@@ -165,4 +163,29 @@ pub fn print_packet(packet: &DnsPacket) {
 // passed to it is the right size.
 fn parse_big_endian_bytes_to_u16(bytes: &[u8]) -> u16 {
     ((bytes[0] as u16) << 8) + (bytes[1] as u16)
+}
+
+fn parse_dns_flags(bytes: &[u8]) -> DnsFlags {
+    let qr_bit: bool = (bytes[0] >> 7) & 1 == 1;
+    let aa_bit: bool = (bytes[0] >> 2) & 1 == 1;
+    let tc_bit: bool = (bytes[0] >> 1) & 1 == 1;
+    let rd_bit: bool = (bytes[0]) & 1 == 1;
+    let ra_bit: bool = (bytes[1] >> 7) & 1 == 1;
+    let ad_bit: bool = (bytes[1] >> 5) & 1 == 1;
+    let cd_bit: bool = (bytes[1] >> 4) & 1 == 1;
+
+    // TODO(dylan): opcode, rcode, maybe check Z value (but probably not needed
+    // in struct)
+    DnsFlags{
+        qr_bit,
+        opcode: DnsOpcode::Query,
+        aa_bit,
+        tc_bit,
+        rd_bit,
+        ra_bit,
+        z: false,
+        ad_bit,
+        cd_bit,
+        rcode: DnsRCode::NoError,
+    }
 }
