@@ -44,8 +44,9 @@ pub struct DnsFlags {
     // supports recursion, false if response is from a server that does not,
     // undefined/ignored in a query
     ra_bit: bool,
-    // The next bit is the Z field, which is reserved and should be zero.
-    z: bool,
+    // The next bit is the Z field, which is reserved and should be zero. We
+    // don't need it in the struct
+
     // TODO(dylan): Better understand/document next two DNSSEC flags
     // Authenticated Data: Part of DNSSEC (RFC 2535, 4035 and others). Indicates
     // that DNSSEC was used to authenticate all responses. Only relevant when
@@ -136,7 +137,7 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<DnsPacket, String> {
     // Read the first two bytes as a big-endian u16 containing transaction id
     id = parse_big_endian_bytes_to_u16(&packet_bytes[0..2]);
     // Next two bytes are flags
-    flags = parse_dns_flags(&packet_bytes[2..4]);
+    flags = parse_dns_flags(&packet_bytes[2..4])?;
 
     Ok(DnsPacket{
         id, flags, qd_count, an_count, ns_count,
@@ -165,7 +166,7 @@ fn parse_big_endian_bytes_to_u16(bytes: &[u8]) -> u16 {
     ((bytes[0] as u16) << 8) + (bytes[1] as u16)
 }
 
-fn parse_dns_flags(bytes: &[u8]) -> DnsFlags {
+fn parse_dns_flags(bytes: &[u8]) -> Result<DnsFlags, String> {
     let qr_bit: bool = (bytes[0] >> 7) & 1 == 1;
     let aa_bit: bool = (bytes[0] >> 2) & 1 == 1;
     let tc_bit: bool = (bytes[0] >> 1) & 1 == 1;
@@ -174,18 +175,44 @@ fn parse_dns_flags(bytes: &[u8]) -> DnsFlags {
     let ad_bit: bool = (bytes[1] >> 5) & 1 == 1;
     let cd_bit: bool = (bytes[1] >> 4) & 1 == 1;
 
-    // TODO(dylan): opcode, rcode, maybe check Z value (but probably not needed
-    // in struct)
-    DnsFlags{
+    let opcode_val: u8 = (bytes[0] >> 3) & 0b1111;
+    let rcode_val: u8 = (bytes[1]) & 0b1111;
+
+    let opcode = match opcode_val {
+        0 => Ok(DnsOpcode::Query),
+        1 => Ok(DnsOpcode::IQuery),
+        2 => Ok(DnsOpcode::Status),
+        4 => Ok(DnsOpcode::Zone),
+        5 => Ok(DnsOpcode::Update),
+        6 => Ok(DnsOpcode::DSO),
+        _ => Err("Invalid opcode")
+    }?;
+
+    let rcode = match rcode_val {
+        0 => Ok(DnsRCode::NoError),
+        1 => Ok(DnsRCode::FormError),
+        2 => Ok(DnsRCode::ServFail),
+        3 => Ok(DnsRCode::NXDomain),
+        4 => Ok(DnsRCode::NotImp),
+        5 => Ok(DnsRCode::Refused),
+        6 => Ok(DnsRCode::YXDomain),
+        7 => Ok(DnsRCode::YXRRSet),
+        8 => Ok(DnsRCode::NXRRSet),
+        9 => Ok(DnsRCode::NotAuth),
+        10 => Ok(DnsRCode::NotZone),
+        11 => Ok(DnsRCode::DSOTypeNI),
+        _ => Err("Invalid RCode"),
+    }?;
+
+    Ok(DnsFlags{
         qr_bit,
-        opcode: DnsOpcode::Query,
+        opcode,
         aa_bit,
         tc_bit,
         rd_bit,
         ra_bit,
-        z: false,
         ad_bit,
         cd_bit,
-        rcode: DnsRCode::NoError,
-    }
+        rcode,
+    })
 }
