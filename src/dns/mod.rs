@@ -226,3 +226,17 @@ fn parse_dns_flags(bytes: &[u8]) -> Result<DnsFlags, String> {
         rcode,
     })
 }
+
+// *** TESTS ***
+
+#[cfg(test)]
+mod tests {
+    use crate::dns;
+
+    #[test]
+    fn u16_parse_works() {
+        assert_eq!(66, dns::parse_big_endian_bytes_to_u16(&[0x00u8, 0x42u8]));
+        assert_eq!(6025, dns::parse_big_endian_bytes_to_u16(&[0x17u8, 0x89u8]));
+        assert_eq!(32902, dns::parse_big_endian_bytes_to_u16(&[0x80u8, 0x86u8]));
+    }
+}
