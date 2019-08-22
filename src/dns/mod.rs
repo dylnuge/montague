@@ -124,10 +124,10 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<DnsPacket, String> {
     let id: u16;
     let flags: DnsFlags;
     // TODO(dylan) remove default values
-    let qd_count: u16 = 0;
-    let an_count: u16 = 0;
-    let ns_count: u16 = 0;
-    let ar_count: u16 = 0;
+    let qd_count: u16;
+    let an_count: u16;
+    let ns_count: u16;
+    let ar_count: u16;
     let mut questions: Vec<DnsQuestion> = Vec::new();
     let mut answers: Vec<DnsResourceRecord> = Vec::new();
     let mut ns_records: Vec<DnsResourceRecord> = Vec::new();
@@ -138,6 +138,11 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<DnsPacket, String> {
     id = parse_big_endian_bytes_to_u16(&packet_bytes[0..2]);
     // Next two bytes are flags
     flags = parse_dns_flags(&packet_bytes[2..4])?;
+    // Counts are next four u16s (big-endian)
+    qd_count = parse_big_endian_bytes_to_u16(&packet_bytes[4..6]);
+    an_count = parse_big_endian_bytes_to_u16(&packet_bytes[6..8]);
+    ns_count = parse_big_endian_bytes_to_u16(&packet_bytes[8..10]);
+    ar_count = parse_big_endian_bytes_to_u16(&packet_bytes[10..12]);
 
     Ok(DnsPacket{
         id, flags, qd_count, an_count, ns_count,
@@ -153,7 +158,12 @@ pub fn print_packet(packet: &DnsPacket) {
              packet.flags.aa_bit,
              packet.flags.tc_bit,
              packet.flags.rd_bit,
-             packet.flags.ra_bit)
+             packet.flags.ra_bit);
+    println!("qdcount: {}, ancount: {}, nscount: {}, arcount: {}",
+             packet.qd_count,
+             packet.an_count,
+             packet.ns_count,
+             packet.ar_count);
 }
 
 // *** PRIVATE FUNCTIONS ***
