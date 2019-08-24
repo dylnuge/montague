@@ -65,12 +65,11 @@ pub struct DnsFlags {
 #[allow(dead_code)]
 #[derive(PartialEq, Debug)]
 pub struct DnsQuestion {
-    // A QName is split up as a series of labels, separated by dots. For
-    // instance, "blog.example.com." contains three labels, "blog", "example",
-    // and "com". We could store this in a number of different ways internally;
-    // for now I'm going with a vector of strings which represents the labels in
-    // _reverse_ order, that is, starting with the TLD and working down, so
-    // "blog.example.com." would be `vec!["com", "example", "blog"]`.
+    // A QName is split up as a series of labels. For instance, the FQDN
+    // "blog.example.com." contains three labels, "blog", "example", and "com".
+    // We could store this in a number of different ways internally; for now I'm
+    // going with a vector of strings which represents the labels in order.
+    // e.g. "blog.example.com." would be `vec!["blog", "example", "com"]`.
     qname: Vec::<String>,
     // The type of records desired. In general, this is an RRType; there are
     // some RRTypes (like ANY) which are only valid in queries and not actual
@@ -375,6 +374,24 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<DnsPacket, String> {
     ns_count = parse_big_endian_bytes_to_u16(&packet_bytes[8..10]);
     ar_count = parse_big_endian_bytes_to_u16(&packet_bytes[10..12]);
 
+    // The header was 12 bytes, we now begin reading the rest of the packet.
+    // These components are variable length (thanks to how labels are encoded)
+    let mut pos: usize = 12;
+    for _ in 0..qd_count {
+        let (qname, new_pos) = read_name_at(&packet_bytes, pos);
+        let qtype_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos..new_pos+2]);
+        let qclass_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos+2..new_pos+4]);
+        pos = new_pos + 4;
+
+        let question = DnsQuestion {
+            qname: qname,
+            qtype: DnsRRType::A,
+            qclass: DnsClass::IN,
+        };
+
+        questions.push(question);
+    }
+
     Ok(DnsPacket{
         id, flags, qd_count, an_count, ns_count,
         ar_count, questions, answers, ns_records, addl_records,
@@ -441,6 +458,67 @@ fn parse_dns_flags(bytes: &[u8]) -> Result<DnsFlags, String> {
         cd_bit,
         rcode,
     })
+}
+
+// Unlike the other functions, `bytes` here must be the WHOLE dns packet,
+// because labels can contain pointers to back earlier in the packet.
+// TODO(dylan): this feels a lot less clean and breaks the consistency of these
+// private functions. I'm not sure what a good design is here yet; considered
+// using a map for the label pointers but there's complications with that idea
+fn read_name_at(bytes: &[u8], start: usize) -> (Vec::<String>, usize) {
+    // TODO: This function doesn't handle malformed packets yet
+    let mut labels = Vec::new();
+    let mut pos = start;
+    loop {
+        let len_byte = bytes[pos];
+        // If the length begins with the bits 11, it is a pointer
+        // If it begins with the bits 00, it is a length
+        // Otherwise, it is invalid
+        match (len_byte >> 6) & 0b11u8 {
+            0b11 => {
+                // The pointer includes the lower 6 bits of the "length" and
+                // the entirety of the next byte
+                let pointer_start: usize =
+                    (((len_byte & 0b111111u8) as usize) << 8) +
+                    (bytes[pos+1] as usize);
+
+                // We don't care where the other name ends, just what is there
+                let (mut remainder, _) = read_name_at(bytes, pointer_start);
+                labels.append(&mut remainder);
+
+                // A pointer always is the end of a label; we can advance the
+                // position by the two bytes we've read and return.
+                pos += 2;
+                break;
+            }
+            0b00 => {
+                // Read the next `len_byte` bytes as a label
+                let length = len_byte as usize;
+                pos += 1;
+                if length == 0 {
+                    // When we reach a label of length zero, we're done reading
+                    // the name
+                    break
+                }
+                // TODO the spec is kind of annoying here. It talks a lot about
+                // ASCII but doesn't ever require a domain is made of only ASCII
+                // characters; UTF-8 domains exist in practice. Further, it
+                // talks about "case insensitivity" but then seems to suggest
+                // that if _any_ byte is not alphanumeric ASCII that's out the
+                // window. Let's treat it as a case sensitive UTF-8 string for
+                // now.
+                let label = String::from_utf8(bytes[pos..pos+length].to_vec())
+                    .expect("Label was not UTF-8");
+                labels.push(label);
+                pos += length;
+            }
+            _ => {
+                // TODO ERROR HANDLING
+                break;
+            }
+        }
+    }
+    (labels, pos)
 }
 
 // *** TESTS ***
