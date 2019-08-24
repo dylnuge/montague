@@ -566,4 +566,59 @@ mod tests {
         let result = dns::parse_dns_flags(&flag_bytes).expect("Unexpected error");
         assert_eq!(expected, result);
     }
+
+    #[test]
+    fn name_read_works() {
+        // Using the example in RFC1035 to demonstrate both my code works how I
+        // think it does and my comprehension of how it's supposed to work.
+
+        // Initalize our example "packet" with 0x00s. We don't care about the
+        // values outside where our labels live.
+        let mut packet = [0x00u8; 93];
+        // First label starting at byte 20 is f.isi.arpa
+        packet[20] = 1;
+        packet[21] = 'f' as u8;
+        packet[22] = 3;
+        packet[23] = 'i' as u8;
+        packet[24] = 's' as u8;
+        packet[25] = 'i' as u8;
+        packet[26] = 4;
+        packet[27] = 'a' as u8;
+        packet[28] = 'r' as u8;
+        packet[29] = 'p' as u8;
+        packet[30] = 'a' as u8;
+        packet[31] = 0;
+
+        // Second label starting at byte 40 is foo.f.isi.arpa
+        packet[40] = 3;
+        packet[41] = 'f' as u8;
+        packet[42] = 'o' as u8;
+        packet[43] = 'o' as u8;
+        // Pointer to "f.isi.arpa" at byte 20
+        packet[44] = 0b11000000;
+        packet[45] = 20;
+
+        // Third label at byte 64 is .arpa, pointer to byte 26
+        packet[64] = 0b11000000;
+        packet[65] = 26;
+
+        // Fourth label at byte 92 is just the root
+        packet[92] = 0;
+
+        let (labels, pos) = dns::read_name_at(&packet, 20);
+        assert_eq!(labels, vec!["f", "isi", "arpa"]);
+        assert_eq!(pos, 32);
+
+        let (labels, pos) = dns::read_name_at(&packet, 40);
+        assert_eq!(labels, vec!["foo", "f", "isi", "arpa"]);
+        assert_eq!(pos, 46);
+
+        let (labels, pos) = dns::read_name_at(&packet, 64);
+        assert_eq!(labels, vec!["arpa"]);
+        assert_eq!(pos, 66);
+
+        let (labels, pos) = dns::read_name_at(&packet, 92);
+        assert_eq!(labels, Vec::<String>::new());
+        assert_eq!(pos, 93);
+    }
 }
