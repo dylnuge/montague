@@ -1,5 +1,5 @@
-use std::net;
 use std::error;
+use std::net;
 
 mod dns;
 
@@ -10,7 +10,7 @@ type Result<T> = std::result::Result<T, Box<error::Error>>;
 
 // Main server thread entry point. Listens for a connection on
 // localhost (127.0.0.1) UDP port 5300 and reads up to 500 bytes
-fn listen_once()  -> Result<()> {
+fn listen_once() -> Result<()> {
     // First, open the UDP socket
     println!("Listening for UDP connection");
     let socket = net::UdpSocket::bind("127.0.0.1:5300")?;

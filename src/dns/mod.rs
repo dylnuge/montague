@@ -59,7 +59,7 @@ pub struct DnsFlags {
     cd_bit: bool,
     // RCode: A four bit field indicating the status of a response.
     // Undefined/ignored in queries.
-    rcode: DnsRCode
+    rcode: DnsRCode,
 }
 
 #[allow(dead_code)]
@@ -70,7 +70,7 @@ pub struct DnsQuestion {
     // We could store this in a number of different ways internally; for now I'm
     // going with a vector of strings which represents the labels in order.
     // e.g. "blog.example.com." would be `vec!["blog", "example", "com"]`.
-    qname: Vec::<String>,
+    qname: Vec<String>,
     // The type of records desired. In general, this is an RRType; there are
     // some RRTypes (like ANY) which are only valid in queries and not actual
     // resource records.
@@ -361,7 +361,7 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<DnsPacket, String> {
     let mut questions: Vec<DnsQuestion> = Vec::new();
     let mut answers: Vec<DnsResourceRecord> = Vec::new();
     let mut ns_records: Vec<DnsResourceRecord> = Vec::new();
-    let mut addl_records: Vec<DnsResourceRecord>= Vec::new();
+    let mut addl_records: Vec<DnsResourceRecord> = Vec::new();
 
     // TODO(dylan): Error checking, e.g. DNS request too short
     // Read the first two bytes as a big-endian u16 containing transaction id
@@ -379,8 +379,8 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<DnsPacket, String> {
     let mut pos: usize = 12;
     for _ in 0..qd_count {
         let (qname, new_pos) = read_name_at(&packet_bytes, pos);
-        let qtype_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos..new_pos+2]);
-        let qclass_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos+2..new_pos+4]);
+        let qtype_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos..new_pos + 2]);
+        let qclass_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
         pos = new_pos + 4;
 
         let question = DnsQuestion {
@@ -392,9 +392,17 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<DnsPacket, String> {
         questions.push(question);
     }
 
-    Ok(DnsPacket{
-        id, flags, qd_count, an_count, ns_count,
-        ar_count, questions, answers, ns_records, addl_records,
+    Ok(DnsPacket {
+        id,
+        flags,
+        qd_count,
+        an_count,
+        ns_count,
+        ar_count,
+        questions,
+        answers,
+        ns_records,
+        addl_records,
     })
 }
 
@@ -428,7 +436,7 @@ fn parse_dns_flags(bytes: &[u8]) -> Result<DnsFlags, String> {
         4 => Ok(DnsOpcode::Zone),
         5 => Ok(DnsOpcode::Update),
         6 => Ok(DnsOpcode::DSO),
-        _ => Err("Invalid opcode")
+        _ => Err("Invalid opcode"),
     }?;
 
     let rcode = match rcode_val {
@@ -447,7 +455,7 @@ fn parse_dns_flags(bytes: &[u8]) -> Result<DnsFlags, String> {
         _ => Err("Invalid RCode"),
     }?;
 
-    Ok(DnsFlags{
+    Ok(DnsFlags {
         qr_bit,
         opcode,
         aa_bit,
@@ -465,7 +473,7 @@ fn parse_dns_flags(bytes: &[u8]) -> Result<DnsFlags, String> {
 // TODO(dylan): this feels a lot less clean and breaks the consistency of these
 // private functions. I'm not sure what a good design is here yet; considered
 // using a map for the label pointers but there's complications with that idea
-fn read_name_at(bytes: &[u8], start: usize) -> (Vec::<String>, usize) {
+fn read_name_at(bytes: &[u8], start: usize) -> (Vec<String>, usize) {
     // TODO: This function doesn't handle malformed packets yet
     let mut labels = Vec::new();
     let mut pos = start;
@@ -479,8 +487,7 @@ fn read_name_at(bytes: &[u8], start: usize) -> (Vec::<String>, usize) {
                 // The pointer includes the lower 6 bits of the "length" and
                 // the entirety of the next byte
                 let pointer_start: usize =
-                    (((len_byte & 0b111111u8) as usize) << 8) +
-                    (bytes[pos+1] as usize);
+                    (((len_byte & 0b111111u8) as usize) << 8) + (bytes[pos + 1] as usize);
 
                 // We don't care where the other name ends, just what is there
                 let (mut remainder, _) = read_name_at(bytes, pointer_start);
@@ -498,7 +505,7 @@ fn read_name_at(bytes: &[u8], start: usize) -> (Vec::<String>, usize) {
                 if length == 0 {
                     // When we reach a label of length zero, we're done reading
                     // the name
-                    break
+                    break;
                 }
                 // TODO the spec is kind of annoying here. It talks a lot about
                 // ASCII but doesn't ever require a domain is made of only ASCII
@@ -506,7 +513,7 @@ fn read_name_at(bytes: &[u8], start: usize) -> (Vec::<String>, usize) {
                 // then seems to suggest that if any byte is not alphanumeric
                 // ASCII that's out the window. Let's treat it as a case
                 // sensitive UTF-8 string for now.
-                let label = String::from_utf8(bytes[pos..pos+length].to_vec())
+                let label = String::from_utf8(bytes[pos..pos + length].to_vec())
                     .expect("Label was not UTF-8");
                 labels.push(label);
                 pos += length;
