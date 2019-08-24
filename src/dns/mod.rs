@@ -502,11 +502,10 @@ fn read_name_at(bytes: &[u8], start: usize) -> (Vec::<String>, usize) {
                 }
                 // TODO the spec is kind of annoying here. It talks a lot about
                 // ASCII but doesn't ever require a domain is made of only ASCII
-                // characters; UTF-8 domains exist in practice. Further, it
-                // talks about "case insensitivity" but then seems to suggest
-                // that if _any_ byte is not alphanumeric ASCII that's out the
-                // window. Let's treat it as a case sensitive UTF-8 string for
-                // now.
+                // characters. Further, it talks about "case insensitivity" but
+                // then seems to suggest that if any byte is not alphanumeric
+                // ASCII that's out the window. Let's treat it as a case
+                // sensitive UTF-8 string for now.
                 let label = String::from_utf8(bytes[pos..pos+length].to_vec())
                     .expect("Label was not UTF-8");
                 labels.push(label);
