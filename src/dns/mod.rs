@@ -1,5 +1,7 @@
 mod structs;
 
+use num;
+
 // *** PUBLIC FUNCTIONS ***
 
 // Converts raw bytes into a DnsPacket struct
@@ -83,31 +85,8 @@ fn parse_dns_flags(bytes: &[u8]) -> Result<structs::DnsFlags, String> {
     let opcode_val: u8 = (bytes[0] >> 3) & 0b1111;
     let rcode_val: u8 = (bytes[1]) & 0b1111;
 
-    let opcode = match opcode_val {
-        0 => Ok(structs::DnsOpcode::Query),
-        1 => Ok(structs::DnsOpcode::IQuery),
-        2 => Ok(structs::DnsOpcode::Status),
-        4 => Ok(structs::DnsOpcode::Zone),
-        5 => Ok(structs::DnsOpcode::Update),
-        6 => Ok(structs::DnsOpcode::DSO),
-        _ => Err("Invalid opcode"),
-    }?;
-
-    let rcode = match rcode_val {
-        0 => Ok(structs::DnsRCode::NoError),
-        1 => Ok(structs::DnsRCode::FormError),
-        2 => Ok(structs::DnsRCode::ServFail),
-        3 => Ok(structs::DnsRCode::NXDomain),
-        4 => Ok(structs::DnsRCode::NotImp),
-        5 => Ok(structs::DnsRCode::Refused),
-        6 => Ok(structs::DnsRCode::YXDomain),
-        7 => Ok(structs::DnsRCode::YXRRSet),
-        8 => Ok(structs::DnsRCode::NXRRSet),
-        9 => Ok(structs::DnsRCode::NotAuth),
-        10 => Ok(structs::DnsRCode::NotZone),
-        11 => Ok(structs::DnsRCode::DSOTypeNI),
-        _ => Err("Invalid RCode"),
-    }?;
+    let opcode = num::FromPrimitive::from_u8(opcode_val).expect("Invalid opcode");
+    let rcode = num::FromPrimitive::from_u8(rcode_val).expect("Invalid rcode");
 
     Ok(structs::DnsFlags {
         qr_bit,

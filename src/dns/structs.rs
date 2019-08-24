@@ -1,3 +1,5 @@
+use num_derive::FromPrimitive;
+
 // Reference RFC 1035 ( https://tools.ietf.org/html/rfc1035) and a bajillion
 // others that have made updates to it. I've put comments where the element
 // isn't coming directly from RFC 1035. RFC 6985 summarizes some updates too.
@@ -88,46 +90,46 @@ pub struct DnsResourceRecord {
 }
 
 #[allow(dead_code)]
-#[derive(PartialEq, Debug)]
+#[derive(FromPrimitive, PartialEq, Debug)]
 pub enum DnsOpcode {
     // Opcode 0: standard query
-    Query,
+    Query = 0,
     // Opcode 1: inverse query (obsoleted by RFC 3425)
-    IQuery,
+    IQuery = 1,
     // Opcode 2: server status request
-    Status,
+    Status = 2,
     // 3 reserved for future use
     // Opcode 4: notify of zone change (RFC 1996)
-    Zone,
+    Zone = 4,
     // Opcode 5: dynamic update to DNS records (RFC 2136)
-    Update,
+    Update = 5,
     // Opcode 6: DNS Stateful Operations (RFC 8490)
-    DSO,
+    DSO = 6,
     // 7-15 reserved for future use
 }
 
 #[allow(dead_code)]
-#[derive(PartialEq, Debug)]
+#[derive(FromPrimitive, PartialEq, Debug)]
 pub enum DnsRCode {
     // 0: No error
-    NoError,
+    NoError = 0,
     // 1: Format error - NS couldn't interpret query
-    FormError,
+    FormError = 1,
     // 2: Server failure - NS couldn't process query
-    ServFail,
+    ServFail = 2,
     // 3: Name error - The domain does not exist
-    NXDomain,
+    NXDomain = 3,
     // 4: Not Implemented - The requested operation can't be done by this NS
-    NotImp,
+    NotImp = 4,
     // 5: Refused - Namserver refused operation for an unspecified reason
-    Refused,
+    Refused = 5,
     // TODO(dylan): document what 6-11 actually mean
-    YXDomain,
-    YXRRSet,
-    NXRRSet,
-    NotAuth,
-    NotZone,
-    DSOTypeNI,
+    YXDomain = 6,
+    YXRRSet = 7,
+    NXRRSet = 8,
+    NotAuth = 9,
+    NotZone = 10,
+    DSOTypeNI = 11,
     // 12-15 are reserved
     // TODO(dylan): RCodes above 16 are defined but only for use in records,
     // since the RCode field in the header is too short to store numbers that
@@ -136,212 +138,212 @@ pub enum DnsRCode {
 }
 
 #[allow(dead_code)]
-#[derive(PartialEq, Debug)]
+#[derive(FromPrimitive, PartialEq, Debug)]
 pub enum DnsRRType {
     // There are a lot of these: I've copied them from the IANA list
     // programmatically, but we'll focus on the most common records to implement
     // first: A (IPv4), AAAA (IPv6), CNAME, NS, MX, TXT, SOA, PTR
 
     // 1: A - IPv4 Host Address
-    A,
+    A = 1,
     // 2: NS - Authoritative nameserver
-    NS,
+    NS = 2,
     // 3: MD - a mail destination (OBSOLETE - use MX)
-    MD,
+    MD = 3,
     // 4: MF - a mail forwarder (OBSOLETE - use MX)
-    MF,
+    MF = 4,
     // 5: CNAME - the canonical name for an alias
-    CNAME,
+    CNAME = 5,
     // 6: SOA - marks the start of a zone of authority
-    SOA,
+    SOA = 6,
     // 7: MB - a mailbox domain name (EXPERIMENTAL)
-    MB,
+    MB = 7,
     // 8: MG - a mail group member (EXPERIMENTAL)
-    MG,
+    MG = 8,
     // 9: MR - a mail rename domain name (EXPERIMENTAL)
-    MR,
+    MR = 9,
     // 10: NULL - a null RR (EXPERIMENTAL)
-    NULL,
+    NULL = 10,
     // 11: WKS - a well known service description
-    WKS,
+    WKS = 11,
     // 12: PTR - a domain name pointer
-    PTR,
+    PTR = 12,
     // 13: HINFO - host information
-    HINFO,
+    HINFO = 13,
     // 14: MINFO - mailbox or mail list information
-    MINFO,
+    MINFO = 14,
     // 15: MX - mail exchange
-    MX,
+    MX = 15,
     // 16: TXT - text strings
-    TXT,
+    TXT = 16,
     // 17: RP - for Responsible Person
-    RP,
+    RP = 17,
     // 18: AFSDB - for AFS Data Base location
-    AFSDB,
+    AFSDB = 18,
     // 19: X25 - for X.25 PSDN address
-    X25,
+    X25 = 19,
     // 20: ISDN - for ISDN address
-    ISDN,
+    ISDN = 20,
     // 21: RT - for Route Through
-    RT,
+    RT = 21,
     // 22: NSAP - for NSAP address, NSAP style A record
-    NSAP,
+    NSAP = 22,
     // 23: NSAP-PTR - for domain name pointer, NSAP style
-    NSAPPTR,
+    NSAPPTR = 23,
     // 24: SIG - for security signature
-    SIG,
+    SIG = 24,
     // 25: KEY - for security key
-    KEY,
+    KEY = 25,
     // 26: PX - X.400 mail mapping information
-    PX,
+    PX = 26,
     // 27: GPOS - Geographical Position
-    GPOS,
+    GPOS = 27,
     // 28: AAAA - IPv6 Address
-    AAAA,
+    AAAA = 28,
     // 29: LOC - Location Information
-    LOC,
+    LOC = 29,
     // 30: NXT - Next Domain (OBSOLETE)
-    NXT,
+    NXT = 30,
     // 31: EID - Endpoint Identifier
-    EID,
+    EID = 31,
     // 32: NIMLOC - Nimrod Locator
-    NIMLOC,
+    NIMLOC = 32,
     // 33: SRV - Server Selection
-    SRV,
+    SRV = 33,
     // 34: ATMA - ATM Address
-    ATMA,
+    ATMA = 34,
     // 35: NAPTR - Naming Authority Pointer
-    NAPTR,
+    NAPTR = 35,
     // 36: KX - Key Exchanger
-    KX,
+    KX = 36,
     // 37: CERT - CERT
-    CERT,
+    CERT = 37,
     // 38: A6 - A6 (OBSOLETE - use AAAA)
-    A6,
+    A6 = 38,
     // 39: DNAME - DNAME
-    DNAME,
+    DNAME = 39,
     // 40: SINK - SINK
-    SINK,
+    SINK = 40,
     // 41: OPT - OPT
-    OPT,
+    OPT = 41,
     // 42: APL - APL
-    APL,
+    APL = 42,
     // 43: DS - Delegation Signer
-    DS,
+    DS = 43,
     // 44: SSHFP - SSH Key Fingerprint
-    SSHFP,
+    SSHFP = 44,
     // 45: IPSECKEY - IPSECKEY
-    IPSECKEY,
+    IPSECKEY = 45,
     // 46: RRSIG - RRSIG
-    RRSIG,
+    RRSIG = 46,
     // 47: NSEC - NSEC
-    NSEC,
+    NSEC = 47,
     // 48: DNSKEY - DNSKEY
-    DNSKEY,
+    DNSKEY = 48,
     // 49: DHCID - DHCID
-    DHCID,
+    DHCID = 49,
     // 50: NSEC3 - NSEC3
-    NSEC3,
+    NSEC3 = 50,
     // 51: NSEC3PARAM - NSEC3PARAM
-    NSEC3PARAM,
+    NSEC3PARAM = 51,
     // 52: TLSA - TLSA
-    TLSA,
+    TLSA = 52,
     // 53: SMIMEA - S/MIME cert association
-    SMIMEA,
+    SMIMEA = 53,
     // 54: Unassigned
     // 55: HIP - Host Identity Protocol
-    HIP,
+    HIP = 55,
     // 56: NINFO - NINFO
-    NINFO,
+    NINFO = 56,
     // 57: RKEY - RKEY
-    RKEY,
+    RKEY = 57,
     // 58: TALINK - Trust Anchor LINK
-    TALINK,
+    TALINK = 58,
     // 59: CDS - Child DS
-    CDS,
+    CDS = 59,
     // 60: CDNSKEY - DNSKEY(s) the Child wants reflected in DS
-    CDNSKEY,
+    CDNSKEY = 60,
     // 61: OPENPGPKEY - OpenPGP Key
-    OPENPGPKEY,
+    OPENPGPKEY = 61,
     // 62: CSYNC - Child-To-Parent Synchronization
-    CSYNC,
+    CSYNC = 62,
     // 63: ZONEMD - message digest for DNS zone
-    ZONEMD,
+    ZONEMD = 63,
     // 64-98: Unassigned
     // 99: SPF
-    SPF,
+    SPF = 99,
     // 100: UINFO
-    UINFO,
+    UINFO = 100,
     // 101: UID
-    UID,
+    UID = 101,
     // 102: GID
-    GID,
+    GID = 102,
     // 103: UNSPEC
-    UNSPEC,
+    UNSPEC = 103,
     // 104: NID
-    NID,
+    NID = 104,
     // 105: L32
-    L32,
+    L32 = 105,
     // 106: L64
-    L64,
+    L64 = 106,
     // 107: LP
-    LP,
+    LP = 107,
     // 108: EUI48 - an EUI-48 address
-    EUI48,
+    EUI4 = 108,
     // 109: EUI64 - an EUI-64 address
-    EUI64,
+    EUI64 = 109,
     // 110-248: Unassigned
     // 249: TKEY - Transaction Key
-    TKEY,
+    TKEY = 249,
     // 250: TSIG - Transaction Signature
-    TSIG,
+    TSIG = 250,
     // 251: IXFR - incremental transfer
-    IXFR,
+    IXFR = 251,
     // 252: AXFR - transfer of an entire zone
-    AXFR,
+    AXF = 252,
     // 253: MAILB - mailbox-related RRs (MB, MG or MR)
-    MAILB,
+    MAILB = 253,
     // 254: MAILA - mail agent RRs (OBSOLETE - see MX)
-    MAILA,
+    MAILA = 254,
     // 255: ANY - A request for some or all records the server has available
-    ANY,
+    ANY = 255,
     // 256: URI - URI
-    URI,
+    URI = 256,
     // 257: CAA - Certification Authority Restriction
-    CAA,
+    CAA = 257,
     // 258: AVC - Application Visibility and Control
-    AVC,
+    AVC = 258,
     // 259: DOA - Digital Object Architecture
-    DOA,
+    DOA = 259,
     // 260: AMTRELAY - Automatic Multicast Tunneling Relay
-    AMTRELAY,
+    AMTRELAY = 260,
     // 261-32767: Unassigned
     // 32768: TA - DNSSEC Trust Authorities
-    TA,
+    TA = 32768,
     // 32769: DLV - DNSSEC Lookaside Validation
-    DLV,
+    DLV = 32769,
     // 32770-65279: Unassigned
     // 65280-65534: Private Use
     // 65535: Reserved
 }
 
 #[allow(dead_code)]
-#[derive(PartialEq, Debug)]
+#[derive(FromPrimitive, PartialEq, Debug)]
 pub enum DnsClass {
     // 0: Reserved (RFC 6895)
     // 1: INternet - Basically the only actually used DNS Class
-    IN,
+    IN = 1,
     // 2: CSnet - Obsolete when the DNS standard was published and not even
     //    listed by IANA.
-    CS,
+    CS = 2,
     // 3: CHaos - IANA has this listed, but they cite a paper, not an RFC.
-    CH,
+    CH = 3,
     // 4: HeSiod - Same deal as CHaos.
-    HS,
+    HS = 4,
     // 254: NONE - Used to differentiate nonexistant RRsets from empty
     //      (zero-length) ones in Update operations. (RFC 2136)
-    NONE,
+    NONE = 254,
     // 255: ANY - Only valid in queries, means that the client is asking for any
     //      DNS records regardless of class.
-    ANY,
+    ANY = 255,
 }
