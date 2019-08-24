@@ -39,10 +39,13 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<structs::DnsPacket, S
         let qclass_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
         pos = new_pos + 4;
 
+        let qtype = num::FromPrimitive::from_u16(qtype_num).expect("Invalid qtype");
+        let qclass = num::FromPrimitive::from_u16(qclass_num).expect("Invalid qclass");
+
         let question = structs::DnsQuestion {
-            qname: qname,
-            qtype: structs::DnsRRType::A,
-            qclass: structs::DnsClass::IN,
+            qname,
+            qtype,
+            qclass,
         };
 
         questions.push(question);
