@@ -23,7 +23,7 @@ fn listen_once()  -> Result<()> {
 
     // Process the DNS packet received and print out some data from it
     let packet = dns::process_packet_bytes(&buf)?;
-    dns::print_packet(&packet);
+    println!("DNS Packet Received: {:?}", packet);
 
     println!("All done!");
 

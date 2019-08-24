@@ -6,6 +6,7 @@
 // *** STRUCTURES AND ENUMS ***
 
 #[allow(dead_code)]
+#[derive(PartialEq, Debug)]
 pub struct DnsPacket {
     // DNS transaction ID is a 16 bit number. It's arbitrary when transmitted
     // and copied into the reply so the client knows which replies correspond
@@ -27,6 +28,7 @@ pub struct DnsPacket {
 }
 
 #[allow(dead_code)]
+#[derive(PartialEq, Debug)]
 pub struct DnsFlags {
     // Query/Response: True if this is a response, false if it is a query
     qr_bit: bool,
@@ -61,16 +63,19 @@ pub struct DnsFlags {
 }
 
 #[allow(dead_code)]
+#[derive(PartialEq, Debug)]
 pub struct DnsQuestion {
     // TODO(dylan): implement
 }
 
 #[allow(dead_code)]
+#[derive(PartialEq, Debug)]
 pub struct DnsResourceRecord {
     // TODO(dylan): implement
 }
 
 #[allow(dead_code)]
+#[derive(PartialEq, Debug)]
 pub enum DnsOpcode {
     // Opcode 0: standard query
     Query,
@@ -89,6 +94,7 @@ pub enum DnsOpcode {
 }
 
 #[allow(dead_code)]
+#[derive(PartialEq, Debug)]
 pub enum DnsRCode {
     // 0: No error
     NoError,
@@ -150,23 +156,8 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<DnsPacket, String> {
     })
 }
 
-// Debug function which prints data from packets out
-pub fn print_packet(packet: &DnsPacket) {
-    println!("id: {}", packet.id);
-    println!("qr: {}, aa: {}, tc: {}, rd: {}, ra: {}",
-             packet.flags.qr_bit,
-             packet.flags.aa_bit,
-             packet.flags.tc_bit,
-             packet.flags.rd_bit,
-             packet.flags.ra_bit);
-    println!("qdcount: {}, ancount: {}, nscount: {}, arcount: {}",
-             packet.qd_count,
-             packet.an_count,
-             packet.ns_count,
-             packet.ar_count);
-}
-
 // *** PRIVATE FUNCTIONS ***
+
 // Parse the next two bytes in the passed slice into a u16, assuming they're
 // encoded big-endian (network byte order)
 // TODO(dylan): there's probably more idiomatic ways of handling byte
@@ -238,5 +229,38 @@ mod tests {
         assert_eq!(66, dns::parse_big_endian_bytes_to_u16(&[0x00u8, 0x42u8]));
         assert_eq!(6025, dns::parse_big_endian_bytes_to_u16(&[0x17u8, 0x89u8]));
         assert_eq!(32902, dns::parse_big_endian_bytes_to_u16(&[0x80u8, 0x86u8]));
+    }
+
+    #[test]
+    fn flags_parse_works() {
+        let flag_bytes = [0x01u8, 0x20u8];
+        let expected = dns::DnsFlags {
+            qr_bit: false,
+            opcode: dns::DnsOpcode::Query,
+            aa_bit: false,
+            tc_bit: false,
+            rd_bit: true,
+            ra_bit: false,
+            ad_bit: true,
+            cd_bit: false,
+            rcode: dns::DnsRCode::NoError,
+        };
+        let result = dns::parse_dns_flags(&flag_bytes).expect("Unexpected error");
+        assert_eq!(expected, result);
+
+        let flag_bytes = [0xacu8, 0x23u8];
+        let expected = dns::DnsFlags {
+            qr_bit: true,
+            opcode: dns::DnsOpcode::Update,
+            aa_bit: true,
+            tc_bit: false,
+            rd_bit: false,
+            ra_bit: false,
+            ad_bit: true,
+            cd_bit: false,
+            rcode: dns::DnsRCode::NXDomain,
+        };
+        let result = dns::parse_dns_flags(&flag_bytes).expect("Unexpected error");
+        assert_eq!(expected, result);
     }
 }
