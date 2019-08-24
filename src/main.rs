@@ -25,8 +25,6 @@ fn listen_once()  -> Result<()> {
     let packet = dns::process_packet_bytes(&buf)?;
     println!("DNS Packet Received: {:?}", packet);
 
-    println!("All done!");
-
     Ok(())
 }
 
