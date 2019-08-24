@@ -86,7 +86,20 @@ pub struct DnsQuestion {
 #[allow(dead_code)]
 #[derive(PartialEq, Debug)]
 pub struct DnsResourceRecord {
-    // TODO(dylan): implement
+    // See comment in DnsQuestion struct above, the first three fields here are
+    // nearly identical
+    pub name: Vec<String>,
+    pub rr_type: DnsRRType,
+    pub class: DnsClass,
+    // Unsigned 32 bit integer signifying the amount of time the client can
+    // cache this answer for. 0 means not to cache. Note that RFC 1035 states
+    // this is signed in some sections, this is corrected in errata.
+    pub ttl: u32,
+    // Record length: tells us how long the data in record data is
+    pub rd_length: u16,
+    // Record data: variably interpreted depending on RR type. For now, just
+    // store it as a byte vector
+    pub record: Vec<u8>,
 }
 
 #[allow(dead_code)]

@@ -51,6 +51,24 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<structs::DnsPacket, S
         questions.push(question);
     }
 
+    for _ in 0..an_count {
+        let (rr, new_pos) = parse_rr(&packet_bytes, pos);
+        pos = new_pos;
+        answers.push(rr);
+    }
+
+    for _ in 0..ns_count {
+        let (rr, new_pos) = parse_rr(&packet_bytes, pos);
+        pos = new_pos;
+        ns_records.push(rr);
+    }
+
+    for _ in 0..ar_count {
+        let (rr, new_pos) = parse_rr(&packet_bytes, pos);
+        pos = new_pos;
+        addl_records.push(rr);
+    }
+
     Ok(structs::DnsPacket {
         id,
         flags,
@@ -74,6 +92,13 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<structs::DnsPacket, S
 // passed to it is the right size.
 fn parse_big_endian_bytes_to_u16(bytes: &[u8]) -> u16 {
     ((bytes[0] as u16) << 8) + (bytes[1] as u16)
+}
+
+fn parse_big_endian_bytes_to_u32(bytes: &[u8]) -> u32 {
+    ((bytes[0] as u32) << 24)
+        + ((bytes[1] as u32) << 16)
+        + ((bytes[2] as u32) << 8)
+        + (bytes[3] as u32)
 }
 
 fn parse_dns_flags(bytes: &[u8]) -> Result<structs::DnsFlags, String> {
@@ -102,6 +127,33 @@ fn parse_dns_flags(bytes: &[u8]) -> Result<structs::DnsFlags, String> {
         cd_bit,
         rcode,
     })
+}
+
+// XXX EDNS OPT records are special and for now usually cause this program to panic
+fn parse_rr(packet_bytes: &[u8], mut pos: usize) -> (structs::DnsResourceRecord, usize) {
+        let (name, new_pos) = read_name_at(&packet_bytes, pos);
+        let rrtype_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos..new_pos + 2]);
+        let class_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
+        let ttl = parse_big_endian_bytes_to_u32(&packet_bytes[new_pos + 4..new_pos + 8]);
+        let rd_length = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos + 8..new_pos + 10]);
+        pos = new_pos + 10;
+
+        let record = packet_bytes[pos..pos + (rd_length as usize)].to_vec();
+        pos += rd_length as usize;
+
+        let rr_type = num::FromPrimitive::from_u16(rrtype_num).expect("Invalid rrtype");
+        let class = num::FromPrimitive::from_u16(class_num).expect("Invalid class");
+
+        let rr = structs::DnsResourceRecord {
+            name,
+            rr_type,
+            class,
+            ttl,
+            rd_length,
+            record,
+        };
+
+        (rr, pos)
 }
 
 // Unlike the other functions, `bytes` here must be the WHOLE dns packet,
@@ -174,6 +226,23 @@ mod tests {
         assert_eq!(66, dns::parse_big_endian_bytes_to_u16(&[0x00u8, 0x42u8]));
         assert_eq!(6025, dns::parse_big_endian_bytes_to_u16(&[0x17u8, 0x89u8]));
         assert_eq!(32902, dns::parse_big_endian_bytes_to_u16(&[0x80u8, 0x86u8]));
+        // Ensure additional bytes are irrelevant
+        assert_eq!(
+            32902,
+            dns::parse_big_endian_bytes_to_u16(&[0x80u8, 0x86u8, 0x00u8])
+        );
+    }
+
+    #[test]
+    fn u32_parse_works() {
+        assert_eq!(
+            32902,
+            dns::parse_big_endian_bytes_to_u32(&[0x00u8, 0x00u8, 0x80u8, 0x86u8])
+        );
+        assert_eq!(
+            537034886,
+            dns::parse_big_endian_bytes_to_u32(&[0x20u8, 0x02u8, 0x80u8, 0x86u8])
+        );
     }
 
     #[test]
