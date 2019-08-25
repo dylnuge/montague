@@ -8,7 +8,7 @@ use num_derive::FromPrimitive;
 // *** STRUCTURES AND ENUMS ***
 
 #[allow(dead_code)]
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct DnsPacket {
     // DNS transaction ID is a 16 bit number. It's arbitrary when transmitted
     // and copied into the reply so the client knows which replies correspond
@@ -30,7 +30,7 @@ pub struct DnsPacket {
 }
 
 #[allow(dead_code)]
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct DnsFlags {
     // Query/Response: True if this is a response, false if it is a query
     pub qr_bit: bool,
@@ -65,7 +65,7 @@ pub struct DnsFlags {
 }
 
 #[allow(dead_code)]
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct DnsQuestion {
     // A QName is split up as a series of labels. For instance, the FQDN
     // "blog.example.com." contains three labels, "blog", "example", and "com".
@@ -84,7 +84,7 @@ pub struct DnsQuestion {
 }
 
 #[allow(dead_code)]
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct DnsResourceRecord {
     // See comment in DnsQuestion struct above, the first three fields here are
     // nearly identical
@@ -103,7 +103,7 @@ pub struct DnsResourceRecord {
 }
 
 #[allow(dead_code)]
-#[derive(FromPrimitive, PartialEq, Debug)]
+#[derive(FromPrimitive, Clone, PartialEq, Debug)]
 pub enum DnsOpcode {
     // Opcode 0: standard query
     Query = 0,
@@ -122,7 +122,7 @@ pub enum DnsOpcode {
 }
 
 #[allow(dead_code)]
-#[derive(FromPrimitive, PartialEq, Debug)]
+#[derive(FromPrimitive, Clone, PartialEq, Debug)]
 pub enum DnsRCode {
     // 0: No error
     NoError = 0,
@@ -151,7 +151,7 @@ pub enum DnsRCode {
 }
 
 #[allow(dead_code)]
-#[derive(FromPrimitive, PartialEq, Debug)]
+#[derive(FromPrimitive, Clone, PartialEq, Debug)]
 pub enum DnsRRType {
     // There are a lot of these: I've copied them from the IANA list
     // programmatically, but we'll focus on the most common records to implement
@@ -341,7 +341,7 @@ pub enum DnsRRType {
 }
 
 #[allow(dead_code)]
-#[derive(FromPrimitive, PartialEq, Debug)]
+#[derive(FromPrimitive, Clone, PartialEq, Debug)]
 pub enum DnsClass {
     // 0: Reserved (RFC 6895)
     // 1: INternet - Basically the only actually used DNS Class

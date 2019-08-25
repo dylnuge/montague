@@ -83,6 +83,62 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<structs::DnsPacket, S
     })
 }
 
+pub fn serialize_packet(packet: &structs::DnsPacket) -> Vec<u8> {
+    let mut packet_bytes = Vec::<u8>::new();
+    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.id));
+    packet_bytes.extend_from_slice(&serialize_flags(&packet.flags));
+    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.qd_count));
+    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.an_count));
+    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.ns_count));
+    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.ar_count));
+
+    // TODO actual questions/resource records
+
+    packet_bytes
+}
+
+pub fn nx_answer_from_query(packet: &structs::DnsPacket) -> structs::DnsPacket {
+    let id = packet.id;
+    let flags = structs::DnsFlags {
+        qr_bit: true,
+        opcode: packet.flags.opcode.to_owned(),
+        aa_bit: false,
+        tc_bit: false,
+        rd_bit: packet.flags.rd_bit,
+        ra_bit: false,
+        ad_bit: false,
+        cd_bit: false,
+        rcode: structs::DnsRCode::NXDomain,
+    };
+    // In theory, you can send multiple questions. In practice, there's a lot of
+    // ambiguity on how a server would handle them; NXDOMAIN is one good example
+    // (multiple questions still share one RCODE in response; what if one is for
+    // a real domain and one isn't?). As such, most servers reject multiple questions.
+    let qd_count = 1;
+    let an_count = 0;
+    // We need to send this back at some point
+    let ns_count = 0;
+    let ar_count = 0;
+
+    let questions = packet.questions.to_owned();
+    let answers = Vec::<structs::DnsResourceRecord>::new();
+    let ns_records = Vec::<structs::DnsResourceRecord>::new();
+    let addl_records = Vec::<structs::DnsResourceRecord>::new();
+
+    structs::DnsPacket {
+        id,
+        flags,
+        qd_count,
+        an_count,
+        ns_count,
+        ar_count,
+        questions,
+        answers,
+        ns_records,
+        addl_records,
+    }
+}
+
 // *** PRIVATE FUNCTIONS ***
 
 // Parse the next two bytes in the passed slice into a u16, assuming they're
@@ -99,6 +155,19 @@ fn parse_big_endian_bytes_to_u32(bytes: &[u8]) -> u32 {
         + ((bytes[1] as u32) << 16)
         + ((bytes[2] as u32) << 8)
         + (bytes[3] as u32)
+}
+
+fn u16_to_big_endian_bytes(num: u16) -> [u8; 2] {
+    [(num >> 8 & 0xff) as u8, (num & 0xff) as u8]
+}
+
+fn u32_to_big_endian_bytes(num: u32) -> [u8; 4] {
+    [
+        (num >> 24 & 0xff) as u8,
+        (num >> 16 & 0xff) as u8,
+        (num >> 8 & 0xff) as u8,
+        (num & 0xff) as u8,
+    ]
 }
 
 fn parse_dns_flags(bytes: &[u8]) -> Result<structs::DnsFlags, String> {
@@ -129,31 +198,68 @@ fn parse_dns_flags(bytes: &[u8]) -> Result<structs::DnsFlags, String> {
     })
 }
 
+fn serialize_flags(flags: &structs::DnsFlags) -> [u8; 2] {
+    let mut flag_bytes = [0x00, 0x00];
+    // Could also just convert bools to 1/0, shift them, and OR them, but this
+    // avoids the type conversion and IMHO looks a little cleaner (albeit verbose)
+    if flags.qr_bit {
+        flag_bytes[0] |= 0b10000000;
+    }
+    if flags.aa_bit {
+        flag_bytes[0] |= 0b00000100;
+    }
+    if flags.tc_bit {
+        flag_bytes[0] |= 0b00000010;
+    }
+    if flags.rd_bit {
+        flag_bytes[0] |= 0b00000001;
+    }
+    if flags.ra_bit {
+        flag_bytes[1] |= 0b10000000;
+    }
+    if flags.ad_bit {
+        flag_bytes[1] |= 0b00100000;
+    }
+    if flags.cd_bit {
+        flag_bytes[1] |= 0b00010000;
+    }
+
+    // TODO(dylan): The need to copy the enums here just to get their int value
+    // feels like it might be wrong; there's probably a better way to do this.
+    // Clear out all but the lower four bits to ensure this won't clobber other fields.
+    let opcode_num = (flags.opcode.to_owned() as u8) & 0x0f;
+    let rcode_num = (flags.rcode.to_owned() as u8) & 0x0f;
+    flag_bytes[0] |= opcode_num << 3;
+    flag_bytes[1] |= rcode_num;
+
+    flag_bytes
+}
+
 // XXX EDNS OPT records are special and for now usually cause this program to panic
 fn parse_rr(packet_bytes: &[u8], mut pos: usize) -> (structs::DnsResourceRecord, usize) {
-        let (name, new_pos) = read_name_at(&packet_bytes, pos);
-        let rrtype_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos..new_pos + 2]);
-        let class_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
-        let ttl = parse_big_endian_bytes_to_u32(&packet_bytes[new_pos + 4..new_pos + 8]);
-        let rd_length = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos + 8..new_pos + 10]);
-        pos = new_pos + 10;
+    let (name, new_pos) = read_name_at(&packet_bytes, pos);
+    let rrtype_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos..new_pos + 2]);
+    let class_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
+    let ttl = parse_big_endian_bytes_to_u32(&packet_bytes[new_pos + 4..new_pos + 8]);
+    let rd_length = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos + 8..new_pos + 10]);
+    pos = new_pos + 10;
 
-        let record = packet_bytes[pos..pos + (rd_length as usize)].to_vec();
-        pos += rd_length as usize;
+    let record = packet_bytes[pos..pos + (rd_length as usize)].to_vec();
+    pos += rd_length as usize;
 
-        let rr_type = num::FromPrimitive::from_u16(rrtype_num).expect("Invalid rrtype");
-        let class = num::FromPrimitive::from_u16(class_num).expect("Invalid class");
+    let rr_type = num::FromPrimitive::from_u16(rrtype_num).expect("Invalid rrtype");
+    let class = num::FromPrimitive::from_u16(class_num).expect("Invalid class");
 
-        let rr = structs::DnsResourceRecord {
-            name,
-            rr_type,
-            class,
-            ttl,
-            rd_length,
-            record,
-        };
+    let rr = structs::DnsResourceRecord {
+        name,
+        rr_type,
+        class,
+        ttl,
+        rd_length,
+        record,
+    };
 
-        (rr, pos)
+    (rr, pos)
 }
 
 // Unlike the other functions, `bytes` here must be the WHOLE dns packet,
@@ -242,6 +348,25 @@ mod tests {
         assert_eq!(
             537034886,
             dns::parse_big_endian_bytes_to_u32(&[0x20u8, 0x02u8, 0x80u8, 0x86u8])
+        );
+    }
+
+    #[test]
+    fn u16_serialize_works() {
+        assert_eq!([0x00u8, 0x42u8], dns::u16_to_big_endian_bytes(66));
+        assert_eq!([0x17u8, 0x89u8], dns::u16_to_big_endian_bytes(6025));
+        assert_eq!([0x80u8, 0x86u8], dns::u16_to_big_endian_bytes(32902));
+    }
+
+    #[test]
+    fn u32_serialize_works() {
+        assert_eq!(
+            [0x00u8, 0x00u8, 0x80u8, 0x86u8],
+            dns::u32_to_big_endian_bytes(32902)
+        );
+        assert_eq!(
+            [0x20u8, 0x02u8, 0x80u8, 0x86u8],
+            dns::u32_to_big_endian_bytes(537034886)
         );
     }
 

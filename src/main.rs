@@ -18,12 +18,19 @@ fn listen_once() -> Result<()> {
     // Receive data from the user.
     // TODO(dylan): Up MTU, consider using an alloc here
     let mut buf = [0; 500];
-    let (amt, _) = socket.recv_from(&mut buf)?;
+    let (amt, src) = socket.recv_from(&mut buf)?;
     println!("Data received: {} bytes", amt);
 
     // Process the DNS packet received and print out some data from it
     let packet = dns::process_packet_bytes(&buf)?;
     println!("DNS Packet Received: {:?}", packet);
+
+    // Build an NXDOMAIN answer for the domain queried for
+    // (right now, we don't know any domains and can't behave recursively)
+    let response = dns::nx_answer_from_query(&packet);
+    println!("Response ready: {:?}", response);
+    let response_bytes = dns::serialize_packet(&response);
+    socket.send_to(&response_bytes, &src)?;
 
     Ok(())
 }
