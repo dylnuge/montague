@@ -92,7 +92,18 @@ pub fn serialize_packet(packet: &structs::DnsPacket) -> Vec<u8> {
     packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.ns_count));
     packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.ar_count));
 
-    // TODO actual questions/resource records
+    for question in &packet.questions {
+        packet_bytes.extend_from_slice(&serialize_question(question));
+    };
+    for answer in &packet.answers {
+        packet_bytes.extend_from_slice(&serialize_rr(answer));
+    };
+    for ns_rec in &packet.ns_records {
+        packet_bytes.extend_from_slice(&serialize_rr(ns_rec));
+    };
+    for addl_rec in &packet.addl_records {
+        packet_bytes.extend_from_slice(&serialize_rr(addl_rec));
+    };
 
     packet_bytes
 }
@@ -235,7 +246,10 @@ fn serialize_flags(flags: &structs::DnsFlags) -> [u8; 2] {
     flag_bytes
 }
 
-// XXX EDNS OPT records are special and for now usually cause this program to panic
+// XXX EDNS OPT records are special and for now usually cause this program to panic.
+// Specifically, OPT rewrites what the "class" field should contain; it becomes the
+// UDP payload size instead of the Class ENUM. If we try to cast it from primitive, we
+// wind up panicking (unless it's exactly 254 or 255 bytes)
 fn parse_rr(packet_bytes: &[u8], mut pos: usize) -> (structs::DnsResourceRecord, usize) {
     let (name, new_pos) = read_name_at(&packet_bytes, pos);
     let rrtype_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos..new_pos + 2]);
@@ -260,6 +274,29 @@ fn parse_rr(packet_bytes: &[u8], mut pos: usize) -> (structs::DnsResourceRecord,
     };
 
     (rr, pos)
+}
+
+fn serialize_question(question: &structs::DnsQuestion) -> Vec<u8> {
+    let mut bytes = Vec::new();
+
+    bytes.append(&mut serialize_name(&question.qname));
+    bytes.extend_from_slice(&u16_to_big_endian_bytes(question.qtype.to_owned() as u16));
+    bytes.extend_from_slice(&u16_to_big_endian_bytes(question.qclass.to_owned() as u16));
+
+    bytes
+}
+
+fn serialize_rr(record: &structs::DnsResourceRecord) -> Vec<u8> {
+    let mut bytes = Vec::new();
+
+    bytes.append(&mut serialize_name(&record.name));
+    bytes.extend_from_slice(&u16_to_big_endian_bytes(record.rr_type.to_owned() as u16));
+    bytes.extend_from_slice(&u16_to_big_endian_bytes(record.class.to_owned() as u16));
+    bytes.extend_from_slice(&u32_to_big_endian_bytes(record.ttl));
+    bytes.extend_from_slice(&u16_to_big_endian_bytes(record.rd_length));
+    bytes.extend_from_slice(&record.record);
+
+    bytes
 }
 
 // Unlike the other functions, `bytes` here must be the WHOLE dns packet,
@@ -319,6 +356,24 @@ fn read_name_at(bytes: &[u8], start: usize) -> (Vec<String>, usize) {
         }
     }
     (labels, pos)
+}
+
+// This serialize doesn't take possible label compression into account
+// It also assumes its input will not have any labels > 63 characters long
+fn serialize_name(name: &Vec<String>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    for label in name {
+        // First byte is label length
+        let len: u8 = label.len() as u8;
+        bytes.push(len);
+        for byte in label.as_bytes() {
+            bytes.push(*byte);
+        }
+    };
+    // End with the null label
+    bytes.push(0x00);
+
+    bytes
 }
 
 // *** TESTS ***
