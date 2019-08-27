@@ -72,10 +72,6 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<structs::DnsPacket, S
     Ok(structs::DnsPacket {
         id,
         flags,
-        qd_count,
-        an_count,
-        ns_count,
-        ar_count,
         questions,
         answers,
         ns_records,
@@ -87,23 +83,23 @@ pub fn serialize_packet(packet: &structs::DnsPacket) -> Vec<u8> {
     let mut packet_bytes = Vec::<u8>::new();
     packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.id));
     packet_bytes.extend_from_slice(&serialize_flags(&packet.flags));
-    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.qd_count));
-    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.an_count));
-    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.ns_count));
-    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.ar_count));
+    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.questions.len() as u16));
+    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.answers.len() as u16));
+    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.ns_records.len() as u16));
+    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.addl_records.len() as u16));
 
     for question in &packet.questions {
         packet_bytes.extend_from_slice(&serialize_question(question));
-    };
+    }
     for answer in &packet.answers {
         packet_bytes.extend_from_slice(&serialize_rr(answer));
-    };
+    }
     for ns_rec in &packet.ns_records {
         packet_bytes.extend_from_slice(&serialize_rr(ns_rec));
-    };
+    }
     for addl_rec in &packet.addl_records {
         packet_bytes.extend_from_slice(&serialize_rr(addl_rec));
-    };
+    }
 
     packet_bytes
 }
@@ -121,15 +117,6 @@ pub fn nx_answer_from_query(packet: &structs::DnsPacket) -> structs::DnsPacket {
         cd_bit: false,
         rcode: structs::DnsRCode::NXDomain,
     };
-    // In theory, you can send multiple questions. In practice, there's a lot of
-    // ambiguity on how a server would handle them; NXDOMAIN is one good example
-    // (multiple questions still share one RCODE in response; what if one is for
-    // a real domain and one isn't?). As such, most servers reject multiple questions.
-    let qd_count = 1;
-    let an_count = 0;
-    // We need to send this back at some point
-    let ns_count = 0;
-    let ar_count = 0;
 
     let questions = packet.questions.to_owned();
     let answers = Vec::<structs::DnsResourceRecord>::new();
@@ -139,10 +126,6 @@ pub fn nx_answer_from_query(packet: &structs::DnsPacket) -> structs::DnsPacket {
     structs::DnsPacket {
         id,
         flags,
-        qd_count,
-        an_count,
-        ns_count,
-        ar_count,
         questions,
         answers,
         ns_records,
@@ -369,7 +352,7 @@ fn serialize_name(name: &Vec<String>) -> Vec<u8> {
         for byte in label.as_bytes() {
             bytes.push(*byte);
         }
-    };
+    }
     // End with the null label
     bytes.push(0x00);
 

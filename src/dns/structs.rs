@@ -17,12 +17,8 @@ pub struct DnsPacket {
     // 16 more bits for flags which tell us a lot about the DNS packet.
     pub flags: DnsFlags,
     // u16 for number of: questions (QDCOUNT), answers (ANCOUNT), nameserver
-    // records (NSCOUNT), and additional records (ARCOUNT)
-    pub qd_count: u16,
-    pub an_count: u16,
-    pub ns_count: u16,
-    pub ar_count: u16,
-    // And the actual records themselves
+    // records (NSCOUNT), and additional records (ARCOUNT), followed by each
+    // of those segments in order
     pub questions: Vec<DnsQuestion>,
     pub answers: Vec<DnsResourceRecord>,
     pub ns_records: Vec<DnsResourceRecord>,
