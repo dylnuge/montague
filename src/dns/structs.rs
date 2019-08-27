@@ -7,7 +7,6 @@ use num_derive::FromPrimitive;
 
 // *** STRUCTURES AND ENUMS ***
 
-#[allow(dead_code)]
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsPacket {
     // DNS transaction ID is a 16 bit number. It's arbitrary when transmitted
@@ -25,7 +24,6 @@ pub struct DnsPacket {
     pub addl_recs: Vec<DnsResourceRecord>,
 }
 
-#[allow(dead_code)]
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsFlags {
     // Query/Response: True if this is a response, false if it is a query
@@ -60,7 +58,6 @@ pub struct DnsFlags {
     pub rcode: DnsRCode,
 }
 
-#[allow(dead_code)]
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsQuestion {
     // A QName is split up as a series of labels. For instance, the FQDN
@@ -79,7 +76,6 @@ pub struct DnsQuestion {
     pub qclass: DnsClass,
 }
 
-#[allow(dead_code)]
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsResourceRecord {
     // See comment in DnsQuestion struct above, the first three fields here are
