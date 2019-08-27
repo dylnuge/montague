@@ -6,7 +6,7 @@ use num;
 
 // Converts raw bytes into a DnsPacket struct
 // TODO(dylan): real errors instead of strings
-pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<structs::DnsPacket, String> {
+pub fn deserialize_packet(packet_bytes: &[u8]) -> Result<structs::DnsPacket, String> {
     let id: u16;
     let flags: structs::DnsFlags;
     // TODO(dylan) remove default values
@@ -16,27 +16,27 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<structs::DnsPacket, S
     let ar_count: u16;
     let mut questions: Vec<structs::DnsQuestion> = Vec::new();
     let mut answers: Vec<structs::DnsResourceRecord> = Vec::new();
-    let mut ns_records: Vec<structs::DnsResourceRecord> = Vec::new();
-    let mut addl_records: Vec<structs::DnsResourceRecord> = Vec::new();
+    let mut nameservers: Vec<structs::DnsResourceRecord> = Vec::new();
+    let mut addl_recs: Vec<structs::DnsResourceRecord> = Vec::new();
 
     // TODO(dylan): Error checking, e.g. DNS request too short
     // Read the first two bytes as a big-endian u16 containing transaction id
-    id = parse_big_endian_bytes_to_u16(&packet_bytes[0..2]);
+    id = big_endian_bytes_to_u16(&packet_bytes[0..2]);
     // Next two bytes are flags
-    flags = parse_dns_flags(&packet_bytes[2..4])?;
+    flags = deserialize_flags(&packet_bytes[2..4])?;
     // Counts are next four u16s (big-endian)
-    qd_count = parse_big_endian_bytes_to_u16(&packet_bytes[4..6]);
-    an_count = parse_big_endian_bytes_to_u16(&packet_bytes[6..8]);
-    ns_count = parse_big_endian_bytes_to_u16(&packet_bytes[8..10]);
-    ar_count = parse_big_endian_bytes_to_u16(&packet_bytes[10..12]);
+    qd_count = big_endian_bytes_to_u16(&packet_bytes[4..6]);
+    an_count = big_endian_bytes_to_u16(&packet_bytes[6..8]);
+    ns_count = big_endian_bytes_to_u16(&packet_bytes[8..10]);
+    ar_count = big_endian_bytes_to_u16(&packet_bytes[10..12]);
 
     // The header was 12 bytes, we now begin reading the rest of the packet.
     // These components are variable length (thanks to how labels are encoded)
     let mut pos: usize = 12;
     for _ in 0..qd_count {
-        let (qname, new_pos) = read_name_at(&packet_bytes, pos);
-        let qtype_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos..new_pos + 2]);
-        let qclass_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
+        let (qname, new_pos) = deserialize_name(&packet_bytes, pos);
+        let qtype_num = big_endian_bytes_to_u16(&packet_bytes[new_pos..new_pos + 2]);
+        let qclass_num = big_endian_bytes_to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
         pos = new_pos + 4;
 
         let qtype = num::FromPrimitive::from_u16(qtype_num).expect("Invalid qtype");
@@ -52,21 +52,21 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<structs::DnsPacket, S
     }
 
     for _ in 0..an_count {
-        let (rr, new_pos) = parse_rr(&packet_bytes, pos);
+        let (rr, new_pos) = deserialize_rr(&packet_bytes, pos);
         pos = new_pos;
         answers.push(rr);
     }
 
     for _ in 0..ns_count {
-        let (rr, new_pos) = parse_rr(&packet_bytes, pos);
+        let (rr, new_pos) = deserialize_rr(&packet_bytes, pos);
         pos = new_pos;
-        ns_records.push(rr);
+        nameservers.push(rr);
     }
 
     for _ in 0..ar_count {
-        let (rr, new_pos) = parse_rr(&packet_bytes, pos);
+        let (rr, new_pos) = deserialize_rr(&packet_bytes, pos);
         pos = new_pos;
-        addl_records.push(rr);
+        addl_recs.push(rr);
     }
 
     Ok(structs::DnsPacket {
@@ -74,8 +74,8 @@ pub fn process_packet_bytes(packet_bytes: &[u8]) -> Result<structs::DnsPacket, S
         flags,
         questions,
         answers,
-        ns_records,
-        addl_records,
+        nameservers,
+        addl_recs,
     })
 }
 
@@ -85,8 +85,8 @@ pub fn serialize_packet(packet: &structs::DnsPacket) -> Vec<u8> {
     packet_bytes.extend_from_slice(&serialize_flags(&packet.flags));
     packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.questions.len() as u16));
     packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.answers.len() as u16));
-    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.ns_records.len() as u16));
-    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.addl_records.len() as u16));
+    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.nameservers.len() as u16));
+    packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.addl_recs.len() as u16));
 
     for question in &packet.questions {
         packet_bytes.extend_from_slice(&serialize_question(question));
@@ -94,10 +94,10 @@ pub fn serialize_packet(packet: &structs::DnsPacket) -> Vec<u8> {
     for answer in &packet.answers {
         packet_bytes.extend_from_slice(&serialize_rr(answer));
     }
-    for ns_rec in &packet.ns_records {
+    for ns_rec in &packet.nameservers {
         packet_bytes.extend_from_slice(&serialize_rr(ns_rec));
     }
-    for addl_rec in &packet.addl_records {
+    for addl_rec in &packet.addl_recs {
         packet_bytes.extend_from_slice(&serialize_rr(addl_rec));
     }
 
@@ -120,16 +120,16 @@ pub fn nx_answer_from_query(packet: &structs::DnsPacket) -> structs::DnsPacket {
 
     let questions = packet.questions.to_owned();
     let answers = Vec::<structs::DnsResourceRecord>::new();
-    let ns_records = Vec::<structs::DnsResourceRecord>::new();
-    let addl_records = Vec::<structs::DnsResourceRecord>::new();
+    let nameservers = Vec::<structs::DnsResourceRecord>::new();
+    let addl_recs = Vec::<structs::DnsResourceRecord>::new();
 
     structs::DnsPacket {
         id,
         flags,
         questions,
         answers,
-        ns_records,
-        addl_records,
+        nameservers,
+        addl_recs,
     }
 }
 
@@ -140,11 +140,11 @@ pub fn nx_answer_from_query(packet: &structs::DnsPacket) -> structs::DnsPacket {
 // TODO(dylan): there's probably more idiomatic ways of handling byte
 // conversions in Rust. As is, this function isn't even checking if the slice
 // passed to it is the right size.
-fn parse_big_endian_bytes_to_u16(bytes: &[u8]) -> u16 {
+fn big_endian_bytes_to_u16(bytes: &[u8]) -> u16 {
     ((bytes[0] as u16) << 8) + (bytes[1] as u16)
 }
 
-fn parse_big_endian_bytes_to_u32(bytes: &[u8]) -> u32 {
+fn big_endian_bytes_to_u32(bytes: &[u8]) -> u32 {
     ((bytes[0] as u32) << 24)
         + ((bytes[1] as u32) << 16)
         + ((bytes[2] as u32) << 8)
@@ -164,7 +164,7 @@ fn u32_to_big_endian_bytes(num: u32) -> [u8; 4] {
     ]
 }
 
-fn parse_dns_flags(bytes: &[u8]) -> Result<structs::DnsFlags, String> {
+fn deserialize_flags(bytes: &[u8]) -> Result<structs::DnsFlags, String> {
     let qr_bit: bool = (bytes[0] >> 7) & 1 == 1;
     let aa_bit: bool = (bytes[0] >> 2) & 1 == 1;
     let tc_bit: bool = (bytes[0] >> 1) & 1 == 1;
@@ -233,12 +233,12 @@ fn serialize_flags(flags: &structs::DnsFlags) -> [u8; 2] {
 // Specifically, OPT rewrites what the "class" field should contain; it becomes the
 // UDP payload size instead of the Class ENUM. If we try to cast it from primitive, we
 // wind up panicking (unless it's exactly 254 or 255 bytes)
-fn parse_rr(packet_bytes: &[u8], mut pos: usize) -> (structs::DnsResourceRecord, usize) {
-    let (name, new_pos) = read_name_at(&packet_bytes, pos);
-    let rrtype_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos..new_pos + 2]);
-    let class_num = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
-    let ttl = parse_big_endian_bytes_to_u32(&packet_bytes[new_pos + 4..new_pos + 8]);
-    let rd_length = parse_big_endian_bytes_to_u16(&packet_bytes[new_pos + 8..new_pos + 10]);
+fn deserialize_rr(packet_bytes: &[u8], mut pos: usize) -> (structs::DnsResourceRecord, usize) {
+    let (name, new_pos) = deserialize_name(&packet_bytes, pos);
+    let rrtype_num = big_endian_bytes_to_u16(&packet_bytes[new_pos..new_pos + 2]);
+    let class_num = big_endian_bytes_to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
+    let ttl = big_endian_bytes_to_u32(&packet_bytes[new_pos + 4..new_pos + 8]);
+    let rd_length = big_endian_bytes_to_u16(&packet_bytes[new_pos + 8..new_pos + 10]);
     pos = new_pos + 10;
 
     let record = packet_bytes[pos..pos + (rd_length as usize)].to_vec();
@@ -287,7 +287,7 @@ fn serialize_rr(record: &structs::DnsResourceRecord) -> Vec<u8> {
 // TODO(dylan): this feels a lot less clean and breaks the consistency of these
 // private functions. I'm not sure what a good design is here yet; considered
 // using a map for the label pointers but there's complications with that idea
-fn read_name_at(bytes: &[u8], start: usize) -> (Vec<String>, usize) {
+fn deserialize_name(bytes: &[u8], start: usize) -> (Vec<String>, usize) {
     // TODO: This function doesn't handle malformed packets yet
     let mut labels = Vec::new();
     let mut pos = start;
@@ -304,7 +304,7 @@ fn read_name_at(bytes: &[u8], start: usize) -> (Vec<String>, usize) {
                     (((len_byte & 0b111111u8) as usize) << 8) + (bytes[pos + 1] as usize);
 
                 // We don't care where the other name ends, just what is there
-                let (mut remainder, _) = read_name_at(bytes, pointer_start);
+                let (mut remainder, _) = deserialize_name(bytes, pointer_start);
                 labels.append(&mut remainder);
 
                 // A pointer always is the end of a label; we can advance the
@@ -367,13 +367,13 @@ mod tests {
 
     #[test]
     fn u16_parse_works() {
-        assert_eq!(66, dns::parse_big_endian_bytes_to_u16(&[0x00u8, 0x42u8]));
-        assert_eq!(6025, dns::parse_big_endian_bytes_to_u16(&[0x17u8, 0x89u8]));
-        assert_eq!(32902, dns::parse_big_endian_bytes_to_u16(&[0x80u8, 0x86u8]));
+        assert_eq!(66, dns::big_endian_bytes_to_u16(&[0x00u8, 0x42u8]));
+        assert_eq!(6025, dns::big_endian_bytes_to_u16(&[0x17u8, 0x89u8]));
+        assert_eq!(32902, dns::big_endian_bytes_to_u16(&[0x80u8, 0x86u8]));
         // Ensure additional bytes are irrelevant
         assert_eq!(
             32902,
-            dns::parse_big_endian_bytes_to_u16(&[0x80u8, 0x86u8, 0x00u8])
+            dns::big_endian_bytes_to_u16(&[0x80u8, 0x86u8, 0x00u8])
         );
     }
 
@@ -381,11 +381,11 @@ mod tests {
     fn u32_parse_works() {
         assert_eq!(
             32902,
-            dns::parse_big_endian_bytes_to_u32(&[0x00u8, 0x00u8, 0x80u8, 0x86u8])
+            dns::big_endian_bytes_to_u32(&[0x00u8, 0x00u8, 0x80u8, 0x86u8])
         );
         assert_eq!(
             537034886,
-            dns::parse_big_endian_bytes_to_u32(&[0x20u8, 0x02u8, 0x80u8, 0x86u8])
+            dns::big_endian_bytes_to_u32(&[0x20u8, 0x02u8, 0x80u8, 0x86u8])
         );
     }
 
@@ -409,7 +409,7 @@ mod tests {
     }
 
     #[test]
-    fn flags_parse_works() {
+    fn flags_deserialize_works() {
         let flag_bytes = [0x01u8, 0x20u8];
         let expected = dns::structs::DnsFlags {
             qr_bit: false,
@@ -422,7 +422,7 @@ mod tests {
             cd_bit: false,
             rcode: dns::structs::DnsRCode::NoError,
         };
-        let result = dns::parse_dns_flags(&flag_bytes).expect("Unexpected error");
+        let result = dns::deserialize_flags(&flag_bytes).expect("Unexpected error");
         assert_eq!(expected, result);
 
         let flag_bytes = [0xacu8, 0x23u8];
@@ -437,7 +437,7 @@ mod tests {
             cd_bit: false,
             rcode: dns::structs::DnsRCode::NXDomain,
         };
-        let result = dns::parse_dns_flags(&flag_bytes).expect("Unexpected error");
+        let result = dns::deserialize_flags(&flag_bytes).expect("Unexpected error");
         assert_eq!(expected, result);
     }
 
@@ -479,19 +479,19 @@ mod tests {
         // Fourth label at byte 92 is just the root
         packet[92] = 0;
 
-        let (labels, pos) = dns::read_name_at(&packet, 20);
+        let (labels, pos) = dns::deserialize_name(&packet, 20);
         assert_eq!(labels, vec!["f", "isi", "arpa"]);
         assert_eq!(pos, 32);
 
-        let (labels, pos) = dns::read_name_at(&packet, 40);
+        let (labels, pos) = dns::deserialize_name(&packet, 40);
         assert_eq!(labels, vec!["foo", "f", "isi", "arpa"]);
         assert_eq!(pos, 46);
 
-        let (labels, pos) = dns::read_name_at(&packet, 64);
+        let (labels, pos) = dns::deserialize_name(&packet, 64);
         assert_eq!(labels, vec!["arpa"]);
         assert_eq!(pos, 66);
 
-        let (labels, pos) = dns::read_name_at(&packet, 92);
+        let (labels, pos) = dns::deserialize_name(&packet, 92);
         assert_eq!(labels, Vec::<String>::new());
         assert_eq!(pos, 93);
     }

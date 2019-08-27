@@ -21,8 +21,8 @@ pub struct DnsPacket {
     // of those segments in order
     pub questions: Vec<DnsQuestion>,
     pub answers: Vec<DnsResourceRecord>,
-    pub ns_records: Vec<DnsResourceRecord>,
-    pub addl_records: Vec<DnsResourceRecord>,
+    pub nameservers: Vec<DnsResourceRecord>,
+    pub addl_recs: Vec<DnsResourceRecord>,
 }
 
 #[allow(dead_code)]
