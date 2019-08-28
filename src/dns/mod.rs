@@ -23,7 +23,7 @@ pub fn deserialize_packet(packet_bytes: &[u8]) -> Result<structs::DnsPacket, Str
     // Read the first two bytes as a big-endian u16 containing transaction id
     id = big_endian_bytes_to_u16(&packet_bytes[0..2]);
     // Next two bytes are flags
-    flags = deserialize_flags(&packet_bytes[2..4])?;
+    flags = structs::DnsFlags::from_bytes(&packet_bytes[2..4])?;
     // Counts are next four u16s (big-endian)
     qd_count = big_endian_bytes_to_u16(&packet_bytes[4..6]);
     an_count = big_endian_bytes_to_u16(&packet_bytes[6..8]);
@@ -82,7 +82,7 @@ pub fn deserialize_packet(packet_bytes: &[u8]) -> Result<structs::DnsPacket, Str
 pub fn serialize_packet(packet: &structs::DnsPacket) -> Vec<u8> {
     let mut packet_bytes = Vec::<u8>::new();
     packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.id));
-    packet_bytes.extend_from_slice(&serialize_flags(&packet.flags));
+    packet_bytes.extend_from_slice(&packet.flags.to_bytes());
     packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.questions.len() as u16));
     packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.answers.len() as u16));
     packet_bytes.extend_from_slice(&u16_to_big_endian_bytes(packet.nameservers.len() as u16));
@@ -162,71 +162,6 @@ fn u32_to_big_endian_bytes(num: u32) -> [u8; 4] {
         (num >> 8 & 0xff) as u8,
         (num & 0xff) as u8,
     ]
-}
-
-fn deserialize_flags(bytes: &[u8]) -> Result<structs::DnsFlags, String> {
-    let qr_bit: bool = (bytes[0] >> 7) & 1 == 1;
-    let aa_bit: bool = (bytes[0] >> 2) & 1 == 1;
-    let tc_bit: bool = (bytes[0] >> 1) & 1 == 1;
-    let rd_bit: bool = (bytes[0]) & 1 == 1;
-    let ra_bit: bool = (bytes[1] >> 7) & 1 == 1;
-    let ad_bit: bool = (bytes[1] >> 5) & 1 == 1;
-    let cd_bit: bool = (bytes[1] >> 4) & 1 == 1;
-
-    let opcode_val: u8 = (bytes[0] >> 3) & 0b1111;
-    let rcode_val: u8 = (bytes[1]) & 0b1111;
-
-    let opcode = num::FromPrimitive::from_u8(opcode_val).expect("Invalid opcode");
-    let rcode = num::FromPrimitive::from_u8(rcode_val).expect("Invalid rcode");
-
-    Ok(structs::DnsFlags {
-        qr_bit,
-        opcode,
-        aa_bit,
-        tc_bit,
-        rd_bit,
-        ra_bit,
-        ad_bit,
-        cd_bit,
-        rcode,
-    })
-}
-
-fn serialize_flags(flags: &structs::DnsFlags) -> [u8; 2] {
-    let mut flag_bytes = [0x00, 0x00];
-    // Could also just convert bools to 1/0, shift them, and OR them, but this
-    // avoids the type conversion and IMHO looks a little cleaner (albeit verbose)
-    if flags.qr_bit {
-        flag_bytes[0] |= 0b10000000;
-    }
-    if flags.aa_bit {
-        flag_bytes[0] |= 0b00000100;
-    }
-    if flags.tc_bit {
-        flag_bytes[0] |= 0b00000010;
-    }
-    if flags.rd_bit {
-        flag_bytes[0] |= 0b00000001;
-    }
-    if flags.ra_bit {
-        flag_bytes[1] |= 0b10000000;
-    }
-    if flags.ad_bit {
-        flag_bytes[1] |= 0b00100000;
-    }
-    if flags.cd_bit {
-        flag_bytes[1] |= 0b00010000;
-    }
-
-    // TODO(dylan): The need to copy the enums here just to get their int value
-    // feels like it might be wrong; there's probably a better way to do this.
-    // Clear out all but the lower four bits to ensure this won't clobber other fields.
-    let opcode_num = (flags.opcode.to_owned() as u8) & 0x0f;
-    let rcode_num = (flags.rcode.to_owned() as u8) & 0x0f;
-    flag_bytes[0] |= opcode_num << 3;
-    flag_bytes[1] |= rcode_num;
-
-    flag_bytes
 }
 
 // XXX EDNS OPT records are special and for now usually cause this program to panic.
@@ -406,39 +341,6 @@ mod tests {
             [0x20u8, 0x02u8, 0x80u8, 0x86u8],
             dns::u32_to_big_endian_bytes(537034886)
         );
-    }
-
-    #[test]
-    fn flags_deserialize_works() {
-        let flag_bytes = [0x01u8, 0x20u8];
-        let expected = dns::structs::DnsFlags {
-            qr_bit: false,
-            opcode: dns::structs::DnsOpcode::Query,
-            aa_bit: false,
-            tc_bit: false,
-            rd_bit: true,
-            ra_bit: false,
-            ad_bit: true,
-            cd_bit: false,
-            rcode: dns::structs::DnsRCode::NoError,
-        };
-        let result = dns::deserialize_flags(&flag_bytes).expect("Unexpected error");
-        assert_eq!(expected, result);
-
-        let flag_bytes = [0xacu8, 0x23u8];
-        let expected = dns::structs::DnsFlags {
-            qr_bit: true,
-            opcode: dns::structs::DnsOpcode::Update,
-            aa_bit: true,
-            tc_bit: false,
-            rd_bit: false,
-            ra_bit: false,
-            ad_bit: true,
-            cd_bit: false,
-            rcode: dns::structs::DnsRCode::NXDomain,
-        };
-        let result = dns::deserialize_flags(&flag_bytes).expect("Unexpected error");
-        assert_eq!(expected, result);
     }
 
     #[test]
