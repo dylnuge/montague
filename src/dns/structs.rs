@@ -55,20 +55,8 @@ impl DnsPacket {
         // These components are variable length (thanks to how labels are encoded)
         let mut pos: usize = 12;
         for _ in 0..qd_count {
-            let (qname, new_pos) = names::deserialize_name(&bytes, pos);
-            let qtype_num = big_endian_bytes_to_u16(&bytes[new_pos..new_pos + 2]);
-            let qclass_num = big_endian_bytes_to_u16(&bytes[new_pos + 2..new_pos + 4]);
-            pos = new_pos + 4;
-
-            let qtype = num::FromPrimitive::from_u16(qtype_num).expect("Invalid qtype");
-            let qclass = num::FromPrimitive::from_u16(qclass_num).expect("Invalid qclass");
-
-            let question = DnsQuestion {
-                qname,
-                qtype,
-                qclass,
-            };
-
+            let (question, new_pos) = DnsQuestion::from_bytes(&bytes, pos);
+            pos = new_pos;
             questions.push(question);
         }
 
@@ -246,6 +234,24 @@ pub struct DnsQuestion {
 }
 
 impl DnsQuestion {
+    pub fn from_bytes(packet_bytes: &[u8], mut pos: usize) -> (DnsQuestion, usize) {
+        let (qname, new_pos) = names::deserialize_name(&packet_bytes, pos);
+        let qtype_num = big_endian_bytes_to_u16(&packet_bytes[new_pos..new_pos + 2]);
+        let qclass_num = big_endian_bytes_to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
+        pos = new_pos + 4;
+
+        let qtype = num::FromPrimitive::from_u16(qtype_num).expect("Invalid qtype");
+        let qclass = num::FromPrimitive::from_u16(qclass_num).expect("Invalid qclass");
+
+        let question = DnsQuestion {
+            qname,
+            qtype,
+            qclass,
+        };
+
+        (question, pos)
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
 
