@@ -22,7 +22,7 @@ fn listen_once() -> Result<()> {
     println!("Data received: {} bytes", amt);
 
     // Process the DNS packet received and print out some data from it
-    let packet = dns::structs::DnsPacket::from_bytes(&buf)?;
+    let packet = dns::DnsPacket::from_bytes(&buf)?;
     println!("DNS Packet Received: {:?}", packet);
 
     // Build an NXDOMAIN answer for the domain queried for
