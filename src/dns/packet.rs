@@ -1,4 +1,4 @@
-use super::{bigendians, DnsFlags, DnsQuestion, DnsResourceRecord};
+use super::{bigendians, DnsFlags, DnsQuestion, DnsResourceRecord, DnsFormatError};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsPacket {
@@ -18,7 +18,7 @@ pub struct DnsPacket {
 }
 
 impl DnsPacket {
-    pub fn from_bytes(bytes: &[u8]) -> Result<DnsPacket, String> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<DnsPacket, DnsFormatError> {
         let id: u16;
         let flags: DnsFlags;
         let qd_count: u16;
@@ -45,25 +45,25 @@ impl DnsPacket {
         // These components are variable length (thanks to how labels are encoded)
         let mut pos: usize = 12;
         for _ in 0..qd_count {
-            let (question, new_pos) = DnsQuestion::from_bytes(&bytes, pos);
+            let (question, new_pos) = DnsQuestion::from_bytes(&bytes, pos)?;
             pos = new_pos;
             questions.push(question);
         }
 
         for _ in 0..an_count {
-            let (rr, new_pos) = DnsResourceRecord::from_bytes(&bytes, pos);
+            let (rr, new_pos) = DnsResourceRecord::from_bytes(&bytes, pos)?;
             pos = new_pos;
             answers.push(rr);
         }
 
         for _ in 0..ns_count {
-            let (rr, new_pos) = DnsResourceRecord::from_bytes(&bytes, pos);
+            let (rr, new_pos) = DnsResourceRecord::from_bytes(&bytes, pos)?;
             pos = new_pos;
             nameservers.push(rr);
         }
 
         for _ in 0..ar_count {
-            let (rr, new_pos) = DnsResourceRecord::from_bytes(&bytes, pos);
+            let (rr, new_pos) = DnsResourceRecord::from_bytes(&bytes, pos)?;
             pos = new_pos;
             addl_recs.push(rr);
         }

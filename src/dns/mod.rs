@@ -1,5 +1,6 @@
 mod bigendians;
 mod class;
+mod errors;
 mod flags;
 mod names;
 mod opcode;
@@ -14,6 +15,7 @@ mod rrtype;
 // isn't coming directly from RFC 1035. RFC 6985 summarizes some updates too.
 // See: https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml
 pub use class::DnsClass;
+pub use errors::DnsFormatError;
 pub use flags::DnsFlags;
 pub use opcode::DnsOpcode;
 pub use packet::DnsPacket;

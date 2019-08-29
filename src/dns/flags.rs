@@ -1,4 +1,4 @@
-use super::{DnsOpcode, DnsRCode};
+use super::{DnsOpcode, DnsRCode, DnsFormatError};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsFlags {
@@ -35,7 +35,7 @@ pub struct DnsFlags {
 }
 
 impl DnsFlags {
-    pub fn from_bytes(bytes: &[u8]) -> Result<DnsFlags, String> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<DnsFlags, DnsFormatError> {
         let qr_bit: bool = (bytes[0] >> 7) & 1 == 1;
         let aa_bit: bool = (bytes[0] >> 2) & 1 == 1;
         let tc_bit: bool = (bytes[0] >> 1) & 1 == 1;
@@ -47,8 +47,18 @@ impl DnsFlags {
         let opcode_val: u8 = (bytes[0] >> 3) & 0b1111;
         let rcode_val: u8 = (bytes[1]) & 0b1111;
 
-        let opcode = num::FromPrimitive::from_u8(opcode_val).expect("Invalid opcode");
-        let rcode = num::FromPrimitive::from_u8(rcode_val).expect("Invalid rcode");
+        let opcode = match num::FromPrimitive::from_u8(opcode_val) {
+            Some(x) => Ok(x),
+            None => Err(DnsFormatError {
+                message: format!("Opcode had unexpected value {:x}", opcode_val),
+            }),
+        }?;
+        let rcode = match num::FromPrimitive::from_u8(rcode_val) {
+            Some(x) => Ok(x),
+            None => Err(DnsFormatError {
+                message: format!("Rcode had unexpected value {:x}", rcode_val),
+            }),
+        }?;
 
         Ok(DnsFlags {
             qr_bit,

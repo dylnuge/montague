@@ -1,4 +1,4 @@
-use super::{bigendians, names, DnsClass, DnsRRType};
+use super::{bigendians, names, DnsClass, DnsRRType, DnsFormatError};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsResourceRecord {
@@ -22,8 +22,8 @@ impl DnsResourceRecord {
     // XXX EDNS OPT records are special and for now usually cause this program to panic.
     // Specifically, OPT rewrites what the "class" field should contain; it becomes the
     // UDP payload size instead of the Class ENUM. If we try to cast it from primitive, we
-    // wind up panicking (unless it's exactly 254 or 255 bytes)
-    pub fn from_bytes(packet_bytes: &[u8], mut pos: usize) -> (DnsResourceRecord, usize) {
+    // wind up erroring (unless it's exactly 254 or 255 bytes)
+    pub fn from_bytes(packet_bytes: &[u8], mut pos: usize) -> Result<(DnsResourceRecord, usize), DnsFormatError> {
         let (name, new_pos) = names::deserialize_name(&packet_bytes, pos);
         let rrtype_num = bigendians::to_u16(&packet_bytes[new_pos..new_pos + 2]);
         let class_num = bigendians::to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
@@ -34,8 +34,18 @@ impl DnsResourceRecord {
         let record = packet_bytes[pos..pos + (rd_length as usize)].to_vec();
         pos += rd_length as usize;
 
-        let rr_type = num::FromPrimitive::from_u16(rrtype_num).expect("Invalid rrtype");
-        let class = num::FromPrimitive::from_u16(class_num).expect("Invalid class");
+        let rr_type = match num::FromPrimitive::from_u16(rrtype_num) {
+            Some(x) => Ok(x),
+            None => Err(DnsFormatError{
+                message: format!("Invalid rrtype value: {:x}", rrtype_num),
+            })
+        }?;
+        let class = match num::FromPrimitive::from_u16(class_num) {
+            Some(x) => Ok(x),
+            None => Err(DnsFormatError{
+                message: format!("Invalid class value: {:x}", class_num),
+            })
+        }?;
 
         let rr = DnsResourceRecord {
             name,
@@ -46,7 +56,7 @@ impl DnsResourceRecord {
             record,
         };
 
-        (rr, pos)
+        Ok((rr, pos))
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
