@@ -1,4 +1,7 @@
+use num;
 use num_derive::FromPrimitive;
+
+use super::names;
 
 // Reference RFC 1035 ( https://tools.ietf.org/html/rfc1035) and a bajillion
 // others that have made updates to it. I've put comments where the element
@@ -22,6 +25,105 @@ pub struct DnsPacket {
     pub answers: Vec<DnsResourceRecord>,
     pub nameservers: Vec<DnsResourceRecord>,
     pub addl_recs: Vec<DnsResourceRecord>,
+}
+
+impl DnsPacket {
+    pub fn from_bytes(bytes: &[u8]) -> Result<DnsPacket, String> {
+        let id: u16;
+        let flags: DnsFlags;
+        let qd_count: u16;
+        let an_count: u16;
+        let ns_count: u16;
+        let ar_count: u16;
+        let mut questions: Vec<DnsQuestion> = Vec::new();
+        let mut answers: Vec<DnsResourceRecord> = Vec::new();
+        let mut nameservers: Vec<DnsResourceRecord> = Vec::new();
+        let mut addl_recs: Vec<DnsResourceRecord> = Vec::new();
+
+        // TODO(dylan): Error checking, e.g. DNS request too short
+        // Read the first two bytes as a big-endian u16 containing transaction id
+        id = big_endian_bytes_to_u16(&bytes[0..2]);
+        // Next two bytes are flags
+        flags = DnsFlags::from_bytes(&bytes[2..4])?;
+        // Counts are next four u16s (big-endian)
+        qd_count = big_endian_bytes_to_u16(&bytes[4..6]);
+        an_count = big_endian_bytes_to_u16(&bytes[6..8]);
+        ns_count = big_endian_bytes_to_u16(&bytes[8..10]);
+        ar_count = big_endian_bytes_to_u16(&bytes[10..12]);
+
+        // The header was 12 bytes, we now begin reading the rest of the packet.
+        // These components are variable length (thanks to how labels are encoded)
+        let mut pos: usize = 12;
+        for _ in 0..qd_count {
+            let (qname, new_pos) = names::deserialize_name(&bytes, pos);
+            let qtype_num = big_endian_bytes_to_u16(&bytes[new_pos..new_pos + 2]);
+            let qclass_num = big_endian_bytes_to_u16(&bytes[new_pos + 2..new_pos + 4]);
+            pos = new_pos + 4;
+
+            let qtype = num::FromPrimitive::from_u16(qtype_num).expect("Invalid qtype");
+            let qclass = num::FromPrimitive::from_u16(qclass_num).expect("Invalid qclass");
+
+            let question = DnsQuestion {
+                qname,
+                qtype,
+                qclass,
+            };
+
+            questions.push(question);
+        }
+
+        for _ in 0..an_count {
+            let (rr, new_pos) = DnsResourceRecord::from_bytes(&bytes, pos);
+            pos = new_pos;
+            answers.push(rr);
+        }
+
+        for _ in 0..ns_count {
+            let (rr, new_pos) = DnsResourceRecord::from_bytes(&bytes, pos);
+            pos = new_pos;
+            nameservers.push(rr);
+        }
+
+        for _ in 0..ar_count {
+            let (rr, new_pos) = DnsResourceRecord::from_bytes(&bytes, pos);
+            pos = new_pos;
+            addl_recs.push(rr);
+        }
+
+        Ok(DnsPacket {
+            id,
+            flags,
+            questions,
+            answers,
+            nameservers,
+            addl_recs,
+        })
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::<u8>::new();
+        bytes.extend_from_slice(&u16_to_big_endian_bytes(self.id));
+        bytes.extend_from_slice(&self.flags.to_bytes());
+        bytes.extend_from_slice(&u16_to_big_endian_bytes(self.questions.len() as u16));
+        bytes.extend_from_slice(&u16_to_big_endian_bytes(self.answers.len() as u16));
+        bytes.extend_from_slice(&u16_to_big_endian_bytes(self.nameservers.len() as u16));
+        bytes.extend_from_slice(&u16_to_big_endian_bytes(self.addl_recs.len() as u16));
+
+        for question in &self.questions {
+            bytes.extend_from_slice(&question.to_bytes());
+        }
+        for answer in &self.answers {
+            bytes.extend_from_slice(&answer.to_bytes());
+        }
+        for nameserver in &self.nameservers {
+            bytes.extend_from_slice(&nameserver.to_bytes());
+        }
+        for addl_rec in &self.addl_recs {
+            bytes.extend_from_slice(&addl_rec.to_bytes());
+        }
+
+        bytes
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -143,6 +245,18 @@ pub struct DnsQuestion {
     pub qclass: DnsClass,
 }
 
+impl DnsQuestion {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+
+        bytes.append(&mut names::serialize_name(&self.qname));
+        bytes.extend_from_slice(&u16_to_big_endian_bytes(self.qtype.to_owned() as u16));
+        bytes.extend_from_slice(&u16_to_big_endian_bytes(self.qclass.to_owned() as u16));
+
+        bytes
+    }
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsResourceRecord {
     // See comment in DnsQuestion struct above, the first three fields here are
@@ -159,6 +273,51 @@ pub struct DnsResourceRecord {
     // Record data: variably interpreted depending on RR type. For now, just
     // store it as a byte vector
     pub record: Vec<u8>,
+}
+
+impl DnsResourceRecord {
+    // XXX EDNS OPT records are special and for now usually cause this program to panic.
+    // Specifically, OPT rewrites what the "class" field should contain; it becomes the
+    // UDP payload size instead of the Class ENUM. If we try to cast it from primitive, we
+    // wind up panicking (unless it's exactly 254 or 255 bytes)
+    pub fn from_bytes(packet_bytes: &[u8], mut pos: usize) -> (DnsResourceRecord, usize) {
+        let (name, new_pos) = names::deserialize_name(&packet_bytes, pos);
+        let rrtype_num = big_endian_bytes_to_u16(&packet_bytes[new_pos..new_pos + 2]);
+        let class_num = big_endian_bytes_to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
+        let ttl = big_endian_bytes_to_u32(&packet_bytes[new_pos + 4..new_pos + 8]);
+        let rd_length = big_endian_bytes_to_u16(&packet_bytes[new_pos + 8..new_pos + 10]);
+        pos = new_pos + 10;
+
+        let record = packet_bytes[pos..pos + (rd_length as usize)].to_vec();
+        pos += rd_length as usize;
+
+        let rr_type = num::FromPrimitive::from_u16(rrtype_num).expect("Invalid rrtype");
+        let class = num::FromPrimitive::from_u16(class_num).expect("Invalid class");
+
+        let rr = DnsResourceRecord {
+            name,
+            rr_type,
+            class,
+            ttl,
+            rd_length,
+            record,
+        };
+
+        (rr, pos)
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+
+        bytes.append(&mut names::serialize_name(&self.name));
+        bytes.extend_from_slice(&u16_to_big_endian_bytes(self.rr_type.to_owned() as u16));
+        bytes.extend_from_slice(&u16_to_big_endian_bytes(self.class.to_owned() as u16));
+        bytes.extend_from_slice(&u32_to_big_endian_bytes(self.ttl));
+        bytes.extend_from_slice(&u16_to_big_endian_bytes(self.rd_length));
+        bytes.extend_from_slice(&self.record);
+
+        bytes
+    }
 }
 
 #[allow(dead_code)]
@@ -420,41 +579,115 @@ pub enum DnsClass {
     ANY = 255,
 }
 
+// *** PRIVATE FUNCTIONS ***
+
+// Parse the next two bytes in the passed slice into a u16, assuming they're
+// encoded big-endian (network byte order)
+// TODO(dylan): there's probably more idiomatic ways of handling byte
+// conversions in Rust. As is, this function isn't even checking if the slice
+// passed to it is the right size.
+fn big_endian_bytes_to_u16(bytes: &[u8]) -> u16 {
+    ((bytes[0] as u16) << 8) + (bytes[1] as u16)
+}
+
+fn big_endian_bytes_to_u32(bytes: &[u8]) -> u32 {
+    ((bytes[0] as u32) << 24)
+        + ((bytes[1] as u32) << 16)
+        + ((bytes[2] as u32) << 8)
+        + (bytes[3] as u32)
+}
+
+fn u16_to_big_endian_bytes(num: u16) -> [u8; 2] {
+    [(num >> 8 & 0xff) as u8, (num & 0xff) as u8]
+}
+
+fn u32_to_big_endian_bytes(num: u32) -> [u8; 4] {
+    [
+        (num >> 24 & 0xff) as u8,
+        (num >> 16 & 0xff) as u8,
+        (num >> 8 & 0xff) as u8,
+        (num & 0xff) as u8,
+    ]
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::dns::structs;
+    use crate::dns::structs::*;
 
     #[test]
     fn flags_deserialize_works() {
         let flag_bytes = [0x01u8, 0x20u8];
-        let expected = structs::DnsFlags {
+        let expected = DnsFlags {
             qr_bit: false,
-            opcode: structs::DnsOpcode::Query,
+            opcode: DnsOpcode::Query,
             aa_bit: false,
             tc_bit: false,
             rd_bit: true,
             ra_bit: false,
             ad_bit: true,
             cd_bit: false,
-            rcode: structs::DnsRCode::NoError,
+            rcode: DnsRCode::NoError,
         };
-        let result = structs::DnsFlags::from_bytes(&flag_bytes).expect("Unexpected error");
+        let result = DnsFlags::from_bytes(&flag_bytes).expect("Unexpected error");
         assert_eq!(expected, result);
 
         let flag_bytes = [0xacu8, 0x23u8];
-        let expected = structs::DnsFlags {
+        let expected = DnsFlags {
             qr_bit: true,
-            opcode: structs::DnsOpcode::Update,
+            opcode: DnsOpcode::Update,
             aa_bit: true,
             tc_bit: false,
             rd_bit: false,
             ra_bit: false,
             ad_bit: true,
             cd_bit: false,
-            rcode: structs::DnsRCode::NXDomain,
+            rcode: DnsRCode::NXDomain,
         };
-        let result = structs::DnsFlags::from_bytes(&flag_bytes).expect("Unexpected error");
+        let result = DnsFlags::from_bytes(&flag_bytes).expect("Unexpected error");
         assert_eq!(expected, result);
     }
 
+
+    #[test]
+    fn u16_parse_works() {
+        assert_eq!(66, big_endian_bytes_to_u16(&[0x00u8, 0x42u8]));
+        assert_eq!(6025, big_endian_bytes_to_u16(&[0x17u8, 0x89u8]));
+        assert_eq!(32902, big_endian_bytes_to_u16(&[0x80u8, 0x86u8]));
+        // Ensure additional bytes are irrelevant
+        assert_eq!(
+            32902,
+            big_endian_bytes_to_u16(&[0x80u8, 0x86u8, 0x00u8])
+        );
+    }
+
+    #[test]
+    fn u32_parse_works() {
+        assert_eq!(
+            32902,
+            big_endian_bytes_to_u32(&[0x00u8, 0x00u8, 0x80u8, 0x86u8])
+        );
+        assert_eq!(
+            537034886,
+            big_endian_bytes_to_u32(&[0x20u8, 0x02u8, 0x80u8, 0x86u8])
+        );
+    }
+
+    #[test]
+    fn u16_serialize_works() {
+        assert_eq!([0x00u8, 0x42u8], u16_to_big_endian_bytes(66));
+        assert_eq!([0x17u8, 0x89u8], u16_to_big_endian_bytes(6025));
+        assert_eq!([0x80u8, 0x86u8], u16_to_big_endian_bytes(32902));
+    }
+
+    #[test]
+    fn u32_serialize_works() {
+        assert_eq!(
+            [0x00u8, 0x00u8, 0x80u8, 0x86u8],
+            u32_to_big_endian_bytes(32902)
+        );
+        assert_eq!(
+            [0x20u8, 0x02u8, 0x80u8, 0x86u8],
+            u32_to_big_endian_bytes(537034886)
+        );
+    }
 }
