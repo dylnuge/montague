@@ -1,4 +1,4 @@
-use super::{bigendians, names, DnsClass, DnsRRType, DnsFormatError};
+use super::{bigendians, names, DnsClass, DnsFormatError, DnsRRType};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsQuestion {
@@ -19,7 +19,10 @@ pub struct DnsQuestion {
 }
 
 impl DnsQuestion {
-    pub fn from_bytes(packet_bytes: &[u8], mut pos: usize) -> Result<(DnsQuestion, usize), DnsFormatError> {
+    pub fn from_bytes(
+        packet_bytes: &[u8],
+        mut pos: usize,
+    ) -> Result<(DnsQuestion, usize), DnsFormatError> {
         let (qname, new_pos) = names::deserialize_name(&packet_bytes, pos);
         let qtype_num = bigendians::to_u16(&packet_bytes[new_pos..new_pos + 2]);
         let qclass_num = bigendians::to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
@@ -27,15 +30,17 @@ impl DnsQuestion {
 
         let qtype = match num::FromPrimitive::from_u16(qtype_num) {
             Some(x) => Ok(x),
-            None => Err(DnsFormatError{
-                message: format!("Invalid qtype value: {:x}", qtype_num),
-            })
+            None => Err(DnsFormatError::make_error(format!(
+                "Invalid qtype value: {:x}",
+                qtype_num
+            ))),
         }?;
         let qclass = match num::FromPrimitive::from_u16(qclass_num) {
             Some(x) => Ok(x),
-            None => Err(DnsFormatError{
-                message: format!("Invalid qclass value: {:x}", qclass_num),
-            })
+            None => Err(DnsFormatError::make_error(format!(
+                "Invalid qclass value: {:x}",
+                qclass_num
+            ))),
         }?;
 
         let question = DnsQuestion {

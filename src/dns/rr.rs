@@ -1,4 +1,4 @@
-use super::{bigendians, names, DnsClass, DnsRRType, DnsFormatError};
+use super::{bigendians, names, DnsClass, DnsFormatError, DnsRRType};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsResourceRecord {
@@ -23,7 +23,10 @@ impl DnsResourceRecord {
     // Specifically, OPT rewrites what the "class" field should contain; it becomes the
     // UDP payload size instead of the Class ENUM. If we try to cast it from primitive, we
     // wind up erroring (unless it's exactly 254 or 255 bytes)
-    pub fn from_bytes(packet_bytes: &[u8], mut pos: usize) -> Result<(DnsResourceRecord, usize), DnsFormatError> {
+    pub fn from_bytes(
+        packet_bytes: &[u8],
+        mut pos: usize,
+    ) -> Result<(DnsResourceRecord, usize), DnsFormatError> {
         let (name, new_pos) = names::deserialize_name(&packet_bytes, pos);
         let rrtype_num = bigendians::to_u16(&packet_bytes[new_pos..new_pos + 2]);
         let class_num = bigendians::to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
@@ -36,15 +39,17 @@ impl DnsResourceRecord {
 
         let rr_type = match num::FromPrimitive::from_u16(rrtype_num) {
             Some(x) => Ok(x),
-            None => Err(DnsFormatError{
-                message: format!("Invalid rrtype value: {:x}", rrtype_num),
-            })
+            None => Err(DnsFormatError::make_error(format!(
+                "Invalid rrtype value: {:x}",
+                rrtype_num
+            ))),
         }?;
         let class = match num::FromPrimitive::from_u16(class_num) {
             Some(x) => Ok(x),
-            None => Err(DnsFormatError{
-                message: format!("Invalid class value: {:x}", class_num),
-            })
+            None => Err(DnsFormatError::make_error(format!(
+                "Invalid class value: {:x}",
+                class_num
+            ))),
         }?;
 
         let rr = DnsResourceRecord {

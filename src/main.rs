@@ -22,7 +22,19 @@ fn listen_once() -> Result<()> {
     println!("Data received: {} bytes", amt);
 
     // Process the DNS packet received and print out some data from it
-    let packet = dns::DnsPacket::from_bytes(&buf)?;
+    let packet = match dns::DnsPacket::from_bytes(&buf) {
+        Ok(x) => Ok(x),
+        Err(e) => {
+            println!("Invalid format!");
+            let response = e
+                .get_error_response()
+                .expect("Panic, could not construct response");
+            println!("Returning response {:?}", response);
+            let response_bytes = &response.to_bytes();
+            socket.send_to(&response_bytes, &src)?;
+            Err(e)
+        }
+    }?;
     println!("DNS Packet Received: {:?}", packet);
 
     // Build an NXDOMAIN answer for the domain queried for

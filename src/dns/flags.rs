@@ -1,4 +1,4 @@
-use super::{DnsOpcode, DnsRCode, DnsFormatError};
+use super::{DnsFormatError, DnsOpcode, DnsRCode};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsFlags {
@@ -49,15 +49,17 @@ impl DnsFlags {
 
         let opcode = match num::FromPrimitive::from_u8(opcode_val) {
             Some(x) => Ok(x),
-            None => Err(DnsFormatError {
-                message: format!("Opcode had unexpected value {:x}", opcode_val),
-            }),
+            None => Err(DnsFormatError::make_error(format!(
+                "Invalid opcode value: {:x}",
+                opcode_val
+            ))),
         }?;
         let rcode = match num::FromPrimitive::from_u8(rcode_val) {
             Some(x) => Ok(x),
-            None => Err(DnsFormatError {
-                message: format!("Rcode had unexpected value {:x}", rcode_val),
-            }),
+            None => Err(DnsFormatError::make_error(format!(
+                "Invalid rcode value: {:x}",
+                rcode_val
+            ))),
         }?;
 
         Ok(DnsFlags {

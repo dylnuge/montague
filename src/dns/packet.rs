@@ -1,4 +1,4 @@
-use super::{bigendians, DnsFlags, DnsQuestion, DnsResourceRecord, DnsFormatError};
+use super::{bigendians, DnsFlags, DnsFormatError, DnsQuestion, DnsResourceRecord};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsPacket {
@@ -45,27 +45,85 @@ impl DnsPacket {
         // These components are variable length (thanks to how labels are encoded)
         let mut pos: usize = 12;
         for _ in 0..qd_count {
-            let (question, new_pos) = DnsQuestion::from_bytes(&bytes, pos)?;
-            pos = new_pos;
-            questions.push(question);
+            // TODO(dylan): formerr logic is duplicated several times here,
+            // might be helpful to turn it into a macro
+            match DnsQuestion::from_bytes(&bytes, pos) {
+                Ok((question, new_pos)) => {
+                    pos = new_pos;
+                    questions.push(question);
+                }
+                Err(mut form_err) => {
+                    form_err.set_partial(DnsPacket {
+                        id,
+                        flags,
+                        questions,
+                        answers,
+                        nameservers,
+                        addl_recs,
+                    });
+                    return Err(form_err);
+                }
+            }
         }
 
         for _ in 0..an_count {
-            let (rr, new_pos) = DnsResourceRecord::from_bytes(&bytes, pos)?;
-            pos = new_pos;
-            answers.push(rr);
+            match DnsResourceRecord::from_bytes(&bytes, pos) {
+                Ok((rr, new_pos)) => {
+                    pos = new_pos;
+                    answers.push(rr);
+                }
+                Err(mut form_err) => {
+                    form_err.set_partial(DnsPacket {
+                        id,
+                        flags,
+                        questions,
+                        answers,
+                        nameservers,
+                        addl_recs,
+                    });
+                    return Err(form_err);
+                }
+            }
         }
 
         for _ in 0..ns_count {
-            let (rr, new_pos) = DnsResourceRecord::from_bytes(&bytes, pos)?;
-            pos = new_pos;
-            nameservers.push(rr);
+            match DnsResourceRecord::from_bytes(&bytes, pos) {
+                Ok((rr, new_pos)) => {
+                    pos = new_pos;
+                    nameservers.push(rr);
+                }
+                Err(mut form_err) => {
+                    form_err.set_partial(DnsPacket {
+                        id,
+                        flags,
+                        questions,
+                        answers,
+                        nameservers,
+                        addl_recs,
+                    });
+                    return Err(form_err);
+                }
+            }
         }
 
         for _ in 0..ar_count {
-            let (rr, new_pos) = DnsResourceRecord::from_bytes(&bytes, pos)?;
-            pos = new_pos;
-            addl_recs.push(rr);
+            match DnsResourceRecord::from_bytes(&bytes, pos) {
+                Ok((rr, new_pos)) => {
+                    pos = new_pos;
+                    addl_recs.push(rr);
+                }
+                Err(mut form_err) => {
+                    form_err.set_partial(DnsPacket {
+                        id,
+                        flags,
+                        questions,
+                        answers,
+                        nameservers,
+                        addl_recs,
+                    });
+                    return Err(form_err);
+                }
+            }
         }
 
         Ok(DnsPacket {

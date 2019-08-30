@@ -1,7 +1,7 @@
 use num_derive::FromPrimitive;
 
 #[allow(dead_code)]
-#[derive(FromPrimitive, Clone, PartialEq, Debug)]
+#[derive(FromPrimitive, Copy, Clone, PartialEq, Debug)]
 pub enum DnsOpcode {
     // Opcode 0: standard query
     Query = 0,
