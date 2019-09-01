@@ -41,8 +41,13 @@ impl DnsFlags {
         let tc_bit: bool = (bytes[0] >> 1) & 1 == 1;
         let rd_bit: bool = (bytes[0]) & 1 == 1;
         let ra_bit: bool = (bytes[1] >> 7) & 1 == 1;
+        let z_bit: bool = (bytes[1] >> 6) & 1 == 1;
         let ad_bit: bool = (bytes[1] >> 5) & 1 == 1;
         let cd_bit: bool = (bytes[1] >> 4) & 1 == 1;
+
+        if z_bit {
+            return Err(DnsFormatError::make_error(format!("Z bit was set")));
+        }
 
         let opcode_val: u8 = (bytes[0] >> 3) & 0b1111;
         let rcode_val: u8 = (bytes[1]) & 0b1111;

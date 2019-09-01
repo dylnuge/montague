@@ -25,18 +25,17 @@ pub use rr::DnsResourceRecord;
 pub use rrtype::DnsRRType;
 
 // *** PUBLIC FUNCTIONS ***
-pub fn nx_answer_from_query(packet: &DnsPacket) -> DnsPacket {
+pub fn not_imp_answer_from_query(packet: &DnsPacket) -> DnsPacket {
     let id = packet.id;
     let flags = DnsFlags {
         qr_bit: true,
-        opcode: packet.flags.opcode.to_owned(),
         aa_bit: false,
         tc_bit: false,
-        rd_bit: packet.flags.rd_bit,
         ra_bit: false,
         ad_bit: false,
         cd_bit: false,
-        rcode: DnsRCode::NXDomain,
+        rcode: DnsRCode::NotImp,
+        ..packet.flags
     };
 
     let questions = packet.questions.to_owned();

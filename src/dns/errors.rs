@@ -32,8 +32,7 @@ impl DnsFormatError {
     // Return a FormError response based on the partial packet we decoded
     // If we didn't get far enough in the decode process to have a partial, we
     // return nothing instead; can't find an RFC reference on this yet but
-    // Google DNS does not respond in practice to requests <11 bytes (why 11
-    // and not 12? I don't know yet).
+    // Google DNS does not respond in practice to requests < 12 bytes
     pub fn get_error_response(&self) -> Option<DnsPacket> {
         match &self.partial {
             Some(packet) => {

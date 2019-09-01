@@ -22,24 +22,28 @@ fn listen_once() -> Result<()> {
     println!("Data received: {} bytes", amt);
 
     // Process the DNS packet received and print out some data from it
-    let packet = match dns::DnsPacket::from_bytes(&buf) {
+    let packet = match dns::DnsPacket::from_bytes(&buf[..amt]) {
         Ok(x) => Ok(x),
         Err(e) => {
             println!("Invalid format!");
-            let response = e
-                .get_error_response()
-                .expect("Panic, could not construct response");
-            println!("Returning response {:?}", response);
-            let response_bytes = &response.to_bytes();
-            socket.send_to(&response_bytes, &src)?;
+            match e.get_error_response() {
+                Some(response) => {
+                    let response_bytes = &response.to_bytes();
+                    println!("Returning response {:?}", response);
+                    socket.send_to(&response_bytes, &src)?;
+                }
+                None => {
+                    println!("Not enough info to build a response, dropping connection");
+                }
+            }
             Err(e)
         }
     }?;
     println!("DNS Packet Received: {:?}", packet);
 
-    // Build an NXDOMAIN answer for the domain queried for
-    // (right now, we don't know any domains and can't behave recursively)
-    let response = dns::nx_answer_from_query(&packet);
+    // Build a NotImp answer for the domain queried for
+    // (right now, we don't implement any query types)
+    let response = dns::not_imp_answer_from_query(&packet);
     println!("Response ready: {:?}", response);
     let response_bytes = &response.to_bytes();
     socket.send_to(&response_bytes, &src)?;
