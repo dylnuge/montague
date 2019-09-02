@@ -27,7 +27,7 @@ impl DnsResourceRecord {
         packet_bytes: &[u8],
         mut pos: usize,
     ) -> Result<(DnsResourceRecord, usize), DnsFormatError> {
-        let (name, new_pos) = names::deserialize_name(&packet_bytes, pos);
+        let (name, new_pos) = names::deserialize_name(&packet_bytes, pos)?;
         let rrtype_num = bigendians::to_u16(&packet_bytes[new_pos..new_pos + 2]);
         let class_num = bigendians::to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
         let ttl = bigendians::to_u32(&packet_bytes[new_pos + 4..new_pos + 8]);

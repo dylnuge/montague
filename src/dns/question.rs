@@ -23,7 +23,7 @@ impl DnsQuestion {
         packet_bytes: &[u8],
         mut pos: usize,
     ) -> Result<(DnsQuestion, usize), DnsFormatError> {
-        let (qname, new_pos) = names::deserialize_name(&packet_bytes, pos);
+        let (qname, new_pos) = names::deserialize_name(&packet_bytes, pos)?;
         let qtype_num = bigendians::to_u16(&packet_bytes[new_pos..new_pos + 2]);
         let qclass_num = bigendians::to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
         pos = new_pos + 4;

@@ -1,3 +1,5 @@
+use super::DnsFormatError;
+
 // Functions for handling DNS names
 
 // Unlike the other functions, `bytes` here must be the WHOLE dns packet,
@@ -5,24 +7,43 @@
 // TODO(dylan): this feels a lot less clean and breaks the consistency of these
 // private functions. I'm not sure what a good design is here yet; considered
 // using a map for the label pointers but there's complications with that idea
-pub fn deserialize_name(bytes: &[u8], start: usize) -> (Vec<String>, usize) {
+pub fn deserialize_name(
+    bytes: &[u8],
+    start: usize,
+) -> Result<(Vec<String>, usize), DnsFormatError> {
     // TODO: This function doesn't handle malformed packets yet
     let mut labels = Vec::new();
     let mut pos = start;
+    let packet_len = bytes.len();
     loop {
+        // This check catches two separate cases: the case where the last label we read was the end
+        // of the packet, but was not the root label (so we didn't return), and the case where a
+        // pointer jumped us beyond the end of the packet
+        if pos >= packet_len {
+            return Err(DnsFormatError::make_error(format!(
+                "Reached end of packet while parsing label or label pointer jumped beyond packet"
+            )));
+        }
         let len_byte = bytes[pos];
         // If the length begins with the bits 11, it is a pointer
         // If it begins with the bits 00, it is a length
         // Otherwise, it is invalid
         match (len_byte >> 6) & 0b11u8 {
             0b11 => {
+                // We're about to read two bytes, so we need to check that the next byte is also
+                // valid
+                if pos + 1 >= packet_len {
+                    return Err(DnsFormatError::make_error(format!(
+                        "Unexpected end of packet at label pointer start"
+                    )));
+                }
                 // The pointer includes the lower 6 bits of the "length" and
                 // the entirety of the next byte
                 let pointer_start: usize =
                     (((len_byte & 0b111111u8) as usize) << 8) + (bytes[pos + 1] as usize);
 
                 // We don't care where the other name ends, just what is there
-                let (mut remainder, _) = deserialize_name(bytes, pointer_start);
+                let (mut remainder, _) = deserialize_name(bytes, pointer_start)?;
                 labels.append(&mut remainder);
 
                 // A pointer always is the end of a label; we can advance the
@@ -39,6 +60,12 @@ pub fn deserialize_name(bytes: &[u8], start: usize) -> (Vec<String>, usize) {
                     // the name
                     break;
                 }
+                // Ensure the label we're about to read exists
+                if pos + length >= packet_len {
+                    return Err(DnsFormatError::make_error(format!(
+                        "Label length is longer than remainder of packet"
+                    )));
+                }
                 // TODO the spec is kind of annoying here. It talks a lot about
                 // ASCII but doesn't ever require a domain is made of only ASCII
                 // characters. Further, it talks about "case insensitivity" but
@@ -51,12 +78,15 @@ pub fn deserialize_name(bytes: &[u8], start: usize) -> (Vec<String>, usize) {
                 pos += length;
             }
             _ => {
-                // TODO ERROR HANDLING
-                break;
+                // Technically, there is another label type possible here, proposed in RFC6891.
+                // It's unclear if this is worth supporting in practice.
+                return Err(DnsFormatError::make_error(format!(
+                    "Unsupported or invalid label pointer type"
+                )));
             }
         }
     }
-    (labels, pos)
+    Ok((labels, pos))
 }
 
 // This serialize doesn't take possible label compression into account
@@ -119,19 +149,19 @@ mod tests {
         // Fourth label at byte 92 is just the root
         packet[92] = 0;
 
-        let (labels, pos) = deserialize_name(&packet, 20);
+        let (labels, pos) = deserialize_name(&packet, 20).expect("Deserialize failed");
         assert_eq!(labels, vec!["f", "isi", "arpa"]);
         assert_eq!(pos, 32);
 
-        let (labels, pos) = deserialize_name(&packet, 40);
+        let (labels, pos) = deserialize_name(&packet, 40).expect("Deserialize failed");
         assert_eq!(labels, vec!["foo", "f", "isi", "arpa"]);
         assert_eq!(pos, 46);
 
-        let (labels, pos) = deserialize_name(&packet, 64);
+        let (labels, pos) = deserialize_name(&packet, 64).expect("Deserialize failed");
         assert_eq!(labels, vec!["arpa"]);
         assert_eq!(pos, 66);
 
-        let (labels, pos) = deserialize_name(&packet, 92);
+        let (labels, pos) = deserialize_name(&packet, 92).expect("Deserialize failed");
         assert_eq!(labels, Vec::<String>::new());
         assert_eq!(pos, 93);
     }
