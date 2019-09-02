@@ -24,6 +24,11 @@ impl DnsQuestion {
         mut pos: usize,
     ) -> Result<(DnsQuestion, usize), DnsFormatError> {
         let (qname, new_pos) = names::deserialize_name(&packet_bytes, pos)?;
+        if new_pos + 4 < packet_bytes.len() {
+            return Err(DnsFormatError::make_error(format!(
+                "End of packet parsing question"
+            )));
+        }
         let qtype_num = bigendians::to_u16(&packet_bytes[new_pos..new_pos + 2]);
         let qclass_num = bigendians::to_u16(&packet_bytes[new_pos + 2..new_pos + 4]);
         pos = new_pos + 4;
