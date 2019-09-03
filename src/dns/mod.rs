@@ -1,49 +1,27 @@
-mod bigendians;
-mod class;
-mod errors;
-mod flags;
-mod names;
-mod opcode;
-mod packet;
-mod question;
-mod rcode;
-mod rr;
-mod rrtype;
-
-// Reference RFC 1035 ( https://tools.ietf.org/html/rfc1035) and a bajillion
-// others that have made updates to it. I've put comments where the element
-// isn't coming directly from RFC 1035. RFC 6985 summarizes some updates too.
-// See: https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml
-pub use class::DnsClass;
-pub use errors::DnsFormatError;
-pub use flags::DnsFlags;
-pub use opcode::DnsOpcode;
-pub use packet::DnsPacket;
-pub use question::DnsQuestion;
-pub use rcode::DnsRCode;
-pub use rr::DnsResourceRecord;
-pub use rrtype::DnsRRType;
+pub mod protocol;
 
 // *** PUBLIC FUNCTIONS ***
-pub fn not_imp_answer_from_query(packet: &DnsPacket) -> DnsPacket {
+// This function is a stub that should eventually be removed in favor of more robust server
+// functionality
+pub fn not_imp_answer_from_query(packet: &protocol::DnsPacket) -> protocol::DnsPacket {
     let id = packet.id;
-    let flags = DnsFlags {
+    let flags = protocol::DnsFlags {
         qr_bit: true,
         aa_bit: false,
         tc_bit: false,
         ra_bit: false,
         ad_bit: false,
         cd_bit: false,
-        rcode: DnsRCode::NotImp,
+        rcode: protocol::DnsRCode::NotImp,
         ..packet.flags
     };
 
     let questions = packet.questions.to_owned();
-    let answers = Vec::<DnsResourceRecord>::new();
-    let nameservers = Vec::<DnsResourceRecord>::new();
-    let addl_recs = Vec::<DnsResourceRecord>::new();
+    let answers = Vec::<protocol::DnsResourceRecord>::new();
+    let nameservers = Vec::<protocol::DnsResourceRecord>::new();
+    let addl_recs = Vec::<protocol::DnsResourceRecord>::new();
 
-    DnsPacket {
+    protocol::DnsPacket {
         id,
         flags,
         questions,

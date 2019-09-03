@@ -2,7 +2,7 @@ use super::{bigendians, names, DnsClass, DnsFormatError, DnsRRType};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsResourceRecord {
-    // See comment in DnsQuestion struct above, the first three fields here are
+    // See comment in DnsQuestion struct: the first three fields here are
     // nearly identical
     pub name: Vec<String>,
     pub rr_type: DnsRRType,

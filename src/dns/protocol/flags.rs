@@ -120,8 +120,8 @@ impl DnsFlags {
 
 #[cfg(test)]
 mod tests {
-    use crate::dns::flags::*;
-    use crate::dns::*;
+    use crate::dns::protocol::flags::*;
+    use crate::dns::protocol::*;
 
     #[test]
     fn flags_deserialize_works() {

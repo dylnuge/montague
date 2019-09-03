@@ -3,6 +3,8 @@ use std::net;
 
 mod dns;
 
+use dns::protocol;
+
 // Make Result<T> an alias for a result with a boxed error in it. This lets
 // us write methods that return multiple different types of errors more easily,
 // but has the drawback that we can't statically determine what is in the box.
@@ -22,7 +24,7 @@ fn listen_once() -> Result<()> {
     println!("Data received: {} bytes", amt);
 
     // Process the DNS packet received and print out some data from it
-    let packet = match dns::DnsPacket::from_bytes(&buf[..amt]) {
+    let packet = match protocol::DnsPacket::from_bytes(&buf[..amt]) {
         Ok(x) => Ok(x),
         Err(e) => {
             println!("Invalid format!");

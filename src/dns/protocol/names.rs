@@ -109,7 +109,7 @@ pub fn serialize_name(name: &Vec<String>) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use crate::dns::names::*;
+    use crate::dns::protocol::names::*;
 
     #[test]
     fn name_read_works() {

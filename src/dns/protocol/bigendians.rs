@@ -29,7 +29,7 @@ pub fn from_u32(num: u32) -> [u8; 4] {
 
 #[cfg(test)]
 mod tests {
-    use crate::dns::bigendians::*;
+    use crate::dns::protocol::bigendians::*;
 
     #[test]
     fn u16_parse_works() {
