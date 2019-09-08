@@ -1,4 +1,5 @@
 pub mod protocol;
+pub mod recursive;
 
 // *** PUBLIC FUNCTIONS ***
 // This function is a stub that should eventually be removed in favor of more robust server

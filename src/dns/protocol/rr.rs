@@ -28,7 +28,7 @@ impl DnsResourceRecord {
         mut pos: usize,
     ) -> Result<(DnsResourceRecord, usize), DnsFormatError> {
         let (name, new_pos) = names::deserialize_name(&packet_bytes, pos)?;
-        if new_pos + 10 < packet_bytes.len() {
+        if new_pos + 10 > packet_bytes.len() {
             return Err(DnsFormatError::make_error(format!(
                 "End of packet parsing resource record"
             )));
