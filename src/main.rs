@@ -4,6 +4,7 @@ use std::net;
 mod dns;
 
 use dns::protocol;
+use dns::recursive;
 
 // Make Result<T> an alias for a result with a boxed error in it. This lets
 // us write methods that return multiple different types of errors more easily,
@@ -43,11 +44,30 @@ fn listen_once() -> Result<()> {
     }?;
     println!("DNS Packet Received: {:?}", packet);
 
-    // Build a NotImp answer for the domain queried for
-    // (right now, we don't implement any query types)
-    let response = dns::not_imp_answer_from_query(&packet);
-    println!("Response ready: {:?}", response);
-    let response_bytes = &response.to_bytes();
+    // Confirm that the DNS packet contains exactly 1 question, or return an error
+    // NOTE: The exact semantics of what to do with multiple questions as part of the same query is
+    // unclear. Technically, they're allowed by RFC 1035, but there's practical issues (e.g. if two
+    // different domains are queried for, what does an NXDOMAIN status code in the header
+    // indicate?). Real nameservers seem to generally just discard (ignore) the additional
+    // questions; rejecting them is a bit meaner.
+    if packet.questions.len() != 1 {
+        println!(
+            "Question count was {}, we require it be 1",
+            packet.questions.len()
+        );
+        return Err("Dropping out, implement a better thing here".into());
+    };
+
+    // Run a recursive query on our one question
+    let mut results = recursive::resolve_question(&packet.questions[0])?;
+    // Use the originating txid
+    results.id = packet.id;
+    // Set the RA bit TODO this should probably be owned by the resolver code
+    results.flags.ra_bit = true;
+
+    // Send the results back to the client
+    println!("Returning results: {:?}", results);
+    let response_bytes = &results.to_bytes();
     socket.send_to(&response_bytes, &src)?;
 
     Ok(())

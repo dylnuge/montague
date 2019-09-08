@@ -2,7 +2,7 @@
 
 mod root;
 
-use std::error;
+use std::error::Error;
 use std::net::{IpAddr, UdpSocket};
 
 use super::protocol::{
@@ -10,11 +10,15 @@ use super::protocol::{
 };
 
 // Right now this doesn't use caching, etc
-pub fn resolve_question(question: DnsQuestion) -> Result<Vec<DnsResourceRecord>, DnsFormatError> {
-    Ok(vec![])
+pub fn resolve_question(question: &DnsQuestion) -> Result<DnsPacket, Box<dyn Error>> {
+    // Query the root nameserver
+    let ns = root::get_root_nameserver();
+    let response = query_nameserver(question, ns)?;
+    Ok(response)
 }
 
-fn query_nameserver(question: DnsQuestion, ns: IpAddr) -> Result<DnsPacket, Box<dyn error::Error>> {
+// Sends a query to an authoritative nameserver
+fn query_nameserver(question: &DnsQuestion, ns: IpAddr) -> Result<DnsPacket, Box<dyn Error>> {
     // Construct the query
     let flags = DnsFlags {
         qr_bit: false,
@@ -31,18 +35,21 @@ fn query_nameserver(question: DnsQuestion, ns: IpAddr) -> Result<DnsPacket, Box<
         // TODO real arbitrary ID instead of just hardcoded one
         id: 42,
         flags,
-        questions: vec![question],
+        // TODO is copying the question the right thing to do here? We don't _really_ need another
+        // object, we could potentially refactor packet to write bytes from references. qname is a
+        // string vector, so this is a non-trivial copy.
+        questions: vec![question.to_owned()],
         answers: vec![],
         nameservers: vec![],
         addl_recs: vec![],
     };
 
     // Send the query
-    let socket = UdpSocket::bind("0.0.0.0:0").expect("couldn't bind");
-    socket.connect((ns, 53)).expect("couldn't connect");
-    socket.send(&packet.to_bytes()).expect("couldn't send");
+    let socket = UdpSocket::bind("0.0.0.0:0")?;
+    socket.connect((ns, 53))?;
+    socket.send(&packet.to_bytes())?;
     let mut buf = [0; 2048];
-    let amt = socket.recv(&mut buf).expect("didn't get reply");
+    let amt = socket.recv(&mut buf)?;
 
     // Process the reply
     let reply = DnsPacket::from_bytes(&buf[..amt])?;
@@ -66,7 +73,7 @@ mod tests {
             qclass: protocol::DnsClass::IN,
         };
         let ns = IpAddr::V4(Ipv4Addr::new(192, 203, 230, 10));
-        let packet = query_nameserver(question, ns).expect("query should have worked");
+        let packet = query_nameserver(&question, ns).expect("query should have worked");
         println!("{:?}", packet);
     }
 }
