@@ -5,16 +5,49 @@ mod root;
 use std::error::Error;
 use std::net::{IpAddr, UdpSocket};
 
-use super::protocol::{
-    DnsFlags, DnsFormatError, DnsOpcode, DnsPacket, DnsQuestion, DnsRCode, DnsResourceRecord,
-};
+use super::protocol::{DnsFlags, DnsOpcode, DnsPacket, DnsQuestion, DnsRCode, DnsRRType};
 
 // Right now this doesn't use caching, etc
 pub fn resolve_question(question: &DnsQuestion) -> Result<DnsPacket, Box<dyn Error>> {
     // Query the root nameserver
-    let ns = root::get_root_nameserver();
-    let response = query_nameserver(question, ns)?;
-    Ok(response)
+    let mut ns = root::get_root_nameserver();
+    loop {
+        let response = query_nameserver(question, ns)?;
+        // Check that the response had a nonzero status code, or return an error
+        // TODO(dylan): handle errors here. The most likely is an NXDOMAIN, which we should return
+        // to the user; it's an authoritative statement that the domain does not exist. We might
+        // also get a SERVFAIL or similar, suggesting we should probably try another server
+        if response.flags.rcode != DnsRCode::NoError {
+            return Err(format!(
+                "Nonzero response code {:?} querying {:?}",
+                response.flags.rcode, ns
+            )
+            .into());
+        };
+
+        // If we got answers, we're done!
+        if response.answers.len() > 0 {
+            return Ok(response);
+        }
+
+        // Otherwise we need to look at the next authority to query
+        // TODO(dylan): hacks, assume we always get a glue record in addl records and start
+        // by just looping through those until we find an A record
+        if response.addl_recs.len() > 0 {
+            for rr in response.addl_recs {
+                // Hacks just assume it's an A record too. Proof of concept code!
+                if rr.rr_type == DnsRRType::A {
+                    ns = IpAddr::V4(rr.get_a_ip());
+                    break;
+                }
+            }
+            continue;
+        } else {
+            return Err(
+                "No glue records. A normal server would help you. Ours won't right now.".into(),
+            );
+        }
+    }
 }
 
 // Sends a query to an authoritative nameserver

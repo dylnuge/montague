@@ -1,3 +1,5 @@
+use std::net::Ipv4Addr;
+
 use super::{bigendians, names, DnsClass, DnsFormatError, DnsRRType};
 
 #[derive(Clone, PartialEq, Debug)]
@@ -80,5 +82,28 @@ impl DnsResourceRecord {
         bytes.extend_from_slice(&self.record);
 
         bytes
+    }
+
+    // TODO this is not the final way I want to structure this, getters for every component of
+    // every DNS record type in this class seems unwieldy
+    pub fn get_a_ip(&self) -> Ipv4Addr {
+        if self.rr_type != DnsRRType::A {
+            panic!(
+                "Attempted to decode A record on invalid rr_type {:?}",
+                self.rr_type
+            )
+        }
+
+        if self.rd_length != 4 {
+            // Um, wat? Can this even happen? Is this check needed?
+            panic!("A record contains data that is definitely not an IPv4 address");
+        }
+
+        Ipv4Addr::new(
+            self.record[0],
+            self.record[1],
+            self.record[2],
+            self.record[3],
+        )
     }
 }
