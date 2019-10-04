@@ -14,10 +14,13 @@ pub fn resolve_question(question: &DnsQuestion) -> Result<DnsPacket, Box<dyn Err
     loop {
         let response = query_nameserver(question, ns)?;
         // Check that the response had a nonzero status code, or return an error
-        // TODO(dylan): handle errors here. The most likely is an NXDOMAIN, which we should return
-        // to the user; it's an authoritative statement that the domain does not exist. We might
-        // also get a SERVFAIL or similar, suggesting we should probably try another server
         if response.flags.rcode != DnsRCode::NoError {
+            if response.flags.rcode == DnsRCode::NXDomain {
+                return Ok(response);
+            }
+
+            // TODO(dylan): Handle more errors. We might also get a SERVFAIL or similar, suggesting we
+            // should probably try another server
             return Err(format!(
                 "Nonzero response code {:?} querying {:?}",
                 response.flags.rcode, ns
