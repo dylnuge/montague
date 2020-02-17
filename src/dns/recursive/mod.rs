@@ -5,14 +5,19 @@ mod root;
 use std::error::Error;
 use std::net::{IpAddr, UdpSocket};
 
-use super::protocol::{DnsFlags, DnsOpcode, DnsPacket, DnsQuestion, DnsRCode, DnsRRType};
+use super::protocol::{
+    DnsFlags, DnsOpcode, DnsPacket, DnsQuestion, DnsRCode, DnsRRType, DnsResourceRecord, RecordData,
+};
 
-// Right now this doesn't use caching, etc
+// Right now this doesn't use caching, doesn't try another nameserver if one fails, and a lot of
+// other little things I'd like to add to it.
 pub fn resolve_question(question: &DnsQuestion) -> Result<DnsPacket, Box<dyn Error>> {
     // Query the root nameserver
     let mut ns = root::get_root_nameserver();
     loop {
+        println!("Asking authority question: {:?}", question);
         let response = query_nameserver(question, ns)?;
+        println!("Got response from authority: {:?}", response);
         // Check that the response had a nonzero status code, or return an error
         if response.flags.rcode != DnsRCode::NoError {
             if response.flags.rcode == DnsRCode::NXDomain {
@@ -33,24 +38,52 @@ pub fn resolve_question(question: &DnsQuestion) -> Result<DnsPacket, Box<dyn Err
             return Ok(response);
         }
 
-        // Otherwise we need to look at the next authority to query
-        // TODO(dylan): hacks, assume we always get a glue record in addl records and start
-        // by just looping through those until we find an A record
-        if response.addl_recs.len() > 0 {
-            for rr in response.addl_recs {
-                // Hacks just assume it's an A record too. Proof of concept code!
-                if rr.rr_type == DnsRRType::A {
-                    ns = IpAddr::V4(rr.get_a_ip());
-                    break;
-                }
+        // Without an answer, we need to look at the next authority to query. Per RFC 1034, it's
+        // legal for the nameservers section to include the SOA for the nameserver we're talking
+        // to, as well as NS records for nameservers to talk to next. We'll just take the first NS
+        // record returned (this is a common pattern; NS records are often sent in random orders
+        // for this reason).
+        let mut ns_answer = None;
+        for rr in &response.nameservers {
+            if rr.rr_type == DnsRRType::NS {
+                ns_answer = Some(rr);
+                break;
             }
-            continue;
-        } else {
-            return Err(
-                "No glue records. A normal server would help you. Ours won't right now.".into(),
-            );
+        }
+        if ns_answer == None {
+            // In theory this is disallowed by spec
+            return Err(format!("No error, answer, or nameservers from response").into());
+        }
+
+        // We may have a glue record for this nameserver; use it if we find it
+        let glue_record_ip = find_glue_record_for_ns(ns_answer.unwrap(), &response.addl_recs);
+        match glue_record_ip {
+            None => {
+                panic!("missing glue records!");
+            }
+            Some(ip) => {
+                ns = ip;
+            }
         }
     }
+}
+
+fn find_glue_record_for_ns(
+    ns: &DnsResourceRecord,
+    records: &Vec<DnsResourceRecord>,
+) -> Option<IpAddr> {
+    for rr in records {
+        let ns_name = match &ns.record {
+            RecordData::NS(name) => name,
+            _ => panic!("NS record data is not stored properly"),
+        };
+        // TODO(dylan): Right now we only support running our queries over IPv4. v6
+        // shouldn't be too hard to add in, though.
+        if rr.rr_type == DnsRRType::A && &rr.name == ns_name {
+            return Some(IpAddr::V4(rr.get_a_ip()));
+        }
+    }
+    return None;
 }
 
 // Sends a query to an authoritative nameserver

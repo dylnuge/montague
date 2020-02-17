@@ -22,4 +22,5 @@ pub use packet::DnsPacket;
 pub use question::DnsQuestion;
 pub use rcode::DnsRCode;
 pub use rr::DnsResourceRecord;
+pub use rr::RecordData;
 pub use rrtype::DnsRRType;
