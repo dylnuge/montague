@@ -6,7 +6,8 @@ use std::error::Error;
 use std::net::{IpAddr, UdpSocket};
 
 use super::protocol::{
-    DnsFlags, DnsOpcode, DnsPacket, DnsQuestion, DnsRCode, DnsRRType, DnsResourceRecord, RecordData,
+    DnsClass, DnsFlags, DnsOpcode, DnsPacket, DnsQuestion, DnsRCode, DnsRRType, DnsResourceRecord,
+    RecordData,
 };
 
 // Right now this doesn't use caching, doesn't try another nameserver if one fails, and a lot of
@@ -15,7 +16,7 @@ pub fn resolve_question(question: &DnsQuestion) -> Result<DnsPacket, Box<dyn Err
     // Query the root nameserver
     let mut ns = root::get_root_nameserver();
     loop {
-        println!("Asking authority question: {:?}", question);
+        println!("Asking authority at {:?} question: {:?}", ns, question);
         let response = query_nameserver(question, ns)?;
         println!("Got response from authority: {:?}", response);
         // Check that the response had a nonzero status code, or return an error
@@ -59,7 +60,7 @@ pub fn resolve_question(question: &DnsQuestion) -> Result<DnsPacket, Box<dyn Err
         let glue_record_ip = find_glue_record_for_ns(ns_answer.unwrap(), &response.addl_recs);
         match glue_record_ip {
             None => {
-                panic!("missing glue records!");
+                ns = get_nameserver_address(ns_answer.unwrap())?;
             }
             Some(ip) => {
                 ns = ip;
@@ -84,6 +85,38 @@ fn find_glue_record_for_ns(
         }
     }
     return None;
+}
+
+fn get_nameserver_address(ns: &DnsResourceRecord) -> Result<IpAddr, Box<dyn Error>> {
+    // TODO(dylan): We should detect an infinite loop being caused by a missing glue record. This
+    // can happen if we're asked to talk to, for instance, "ns.example.com" to find out where
+    // "example.com" is. We'll keep repeating the same NS lookup over and over.
+    let ns_name = match &ns.record {
+        RecordData::NS(name) => name,
+        _ => panic!("NS record data is not stored properly"),
+    };
+    let question = DnsQuestion {
+        // Again, label copying seems inefficient
+        qname: ns_name.to_owned(),
+        // Again, hardcoding IPv4
+        qtype: DnsRRType::A,
+        qclass: DnsClass::IN,
+    };
+    // XXX this is definitely not a production server without loop detection
+    let result = resolve_question(&question)?;
+    for answer in &result.answers {
+        if answer.rr_type == DnsRRType::A {
+            match answer.record {
+                RecordData::A(addr) => return Ok(IpAddr::V4(addr)),
+                _ => continue,
+            }
+        }
+    }
+    return Err(format!(
+        "Got result without A records when doing nameserver lookup: {:?}",
+        result
+    )
+    .into());
 }
 
 // Sends a query to an authoritative nameserver
