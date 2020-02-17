@@ -17,7 +17,14 @@ pub struct DnsResourceRecord {
     pub rd_length: u16,
     // Record data: variably interpreted depending on RR type. For now, just
     // store it as a byte vector
-    pub record: Vec<u8>,
+    pub record: RecordData,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum RecordData {
+    A(Ipv4Addr),
+    NS(Vec<String>),
+    Other(Vec<u8>),
 }
 
 impl DnsResourceRecord {
@@ -41,9 +48,6 @@ impl DnsResourceRecord {
         let rd_length = bigendians::to_u16(&packet_bytes[new_pos + 8..new_pos + 10]);
         pos = new_pos + 10;
 
-        let record = packet_bytes[pos..pos + (rd_length as usize)].to_vec();
-        pos += rd_length as usize;
-
         let rr_type = match num::FromPrimitive::from_u16(rrtype_num) {
             Some(x) => Ok(x),
             None => Err(DnsFormatError::make_error(format!(
@@ -58,6 +62,23 @@ impl DnsResourceRecord {
                 class_num
             ))),
         }?;
+
+        let record_bytes = packet_bytes[pos..pos + (rd_length as usize)].to_vec();
+        // TODO(dylan): error handling, decomposition
+        let record = match rr_type {
+            DnsRRType::A => RecordData::A(Ipv4Addr::new(
+                record_bytes[0],
+                record_bytes[1],
+                record_bytes[2],
+                record_bytes[3],
+            )),
+            DnsRRType::NS => {
+                let (name, _) = names::deserialize_name(&packet_bytes, pos)?;
+                RecordData::NS(name)
+            }
+            _ => RecordData::Other(record_bytes),
+        };
+        pos += rd_length as usize;
 
         let rr = DnsResourceRecord {
             name,
@@ -79,7 +100,12 @@ impl DnsResourceRecord {
         bytes.extend_from_slice(&bigendians::from_u16(self.class.to_owned() as u16));
         bytes.extend_from_slice(&bigendians::from_u32(self.ttl));
         bytes.extend_from_slice(&bigendians::from_u16(self.rd_length));
-        bytes.extend_from_slice(&self.record);
+
+        match &self.record {
+            RecordData::A(ipv4) => bytes.extend_from_slice(&ipv4.octets()),
+            RecordData::NS(labels) => bytes.extend_from_slice(&mut names::serialize_name(labels)),
+            RecordData::Other(record_bytes) => bytes.extend_from_slice(&record_bytes),
+        }
 
         bytes
     }
@@ -99,11 +125,9 @@ impl DnsResourceRecord {
             panic!("A record contains data that is definitely not an IPv4 address");
         }
 
-        Ipv4Addr::new(
-            self.record[0],
-            self.record[1],
-            self.record[2],
-            self.record[3],
-        )
+        match self.record {
+            RecordData::A(ipv4) => ipv4,
+            _ => panic!("A record has bad record data, somehow"),
+        }
     }
 }
