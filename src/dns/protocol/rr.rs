@@ -55,13 +55,18 @@ impl DnsResourceRecord {
                 rrtype_num
             ))),
         }?;
-        let class = match num::FromPrimitive::from_u16(class_num) {
-            Some(x) => Ok(x),
-            None => Err(DnsFormatError::make_error(format!(
-                "Invalid class value: {:x}",
-                class_num
-            ))),
-        }?;
+
+        let class = if rr_type == DnsRRType::OPT {
+            DnsClass::EdnsPayloadSize(class_num)
+        } else {
+            match DnsClass::from_u16(class_num) {
+                Some(x) => Ok(x),
+                None => Err(DnsFormatError::make_error(format!(
+                    "Invalid class value: {:x}",
+                    class_num
+                ))),
+            }?
+        };
 
         let record_bytes = packet_bytes[pos..pos + (rd_length as usize)].to_vec();
         // TODO(dylan): error handling, decomposition
@@ -97,7 +102,7 @@ impl DnsResourceRecord {
 
         bytes.append(&mut names::serialize_name(&self.name));
         bytes.extend_from_slice(&bigendians::from_u16(self.rr_type.to_owned() as u16));
-        bytes.extend_from_slice(&bigendians::from_u16(self.class.to_owned() as u16));
+        bytes.extend_from_slice(&bigendians::from_u16(self.class.to_u16()));
         bytes.extend_from_slice(&bigendians::from_u32(self.ttl));
         bytes.extend_from_slice(&bigendians::from_u16(self.rd_length));
 

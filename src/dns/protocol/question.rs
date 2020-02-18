@@ -40,10 +40,11 @@ impl DnsQuestion {
                 qtype_num
             ))),
         }?;
-        let qclass = match num::FromPrimitive::from_u16(qclass_num) {
+
+        let qclass = match DnsClass::from_u16(qclass_num) {
             Some(x) => Ok(x),
             None => Err(DnsFormatError::make_error(format!(
-                "Invalid qclass value: {:x}",
+                "Invalid class value: {:x}",
                 qclass_num
             ))),
         }?;
@@ -62,7 +63,7 @@ impl DnsQuestion {
 
         bytes.append(&mut names::serialize_name(&self.qname));
         bytes.extend_from_slice(&bigendians::from_u16(self.qtype.to_owned() as u16));
-        bytes.extend_from_slice(&bigendians::from_u16(self.qclass.to_owned() as u16));
+        bytes.extend_from_slice(&bigendians::from_u16(self.qclass.to_u16()));
 
         bytes
     }
