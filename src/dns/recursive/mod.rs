@@ -174,6 +174,7 @@ mod tests {
             qtype: protocol::DnsRRType::A,
             qclass: protocol::DnsClass::IN,
         };
+        // TODO not a great practice that this test requires a network connection
         let ns = IpAddr::V4(Ipv4Addr::new(192, 203, 230, 10));
         let packet = query_nameserver(&question, ns).expect("query should have worked");
         println!("{:?}", packet);

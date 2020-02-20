@@ -17,6 +17,8 @@ pub enum DnsClass {
     // 255: ANY - Only valid in queries, means that the client is asking for any
     //      DNS records regardless of class.
     ANY,
+    // RFC 6891 defines the OPT "Pesudo-RR", which overloads the class header
+    //      to contain the requestor's UDP payload size
     EdnsPayloadSize(u16),
 }
 
@@ -41,6 +43,7 @@ impl DnsClass {
             DnsClass::HS => 4,
             DnsClass::NONE => 254,
             DnsClass::ANY => 255,
+            // On an EDNS packet, the "class" is a payload size
             DnsClass::EdnsPayloadSize(payload) => payload.to_owned(),
         }
     }

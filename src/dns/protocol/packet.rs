@@ -41,9 +41,9 @@ impl DnsPacket {
         // Read the first two bytes as a big-endian u16 containing transaction id
         id = bigendians::to_u16(&bytes[0..2]);
         // Next two bytes are flags
-        // If we get an error parsing the flags, we have too little info to return a FormErr; we
-        // could just copy the bad flags but technically a FormErr indicates an issue with the
-        // query, not the flags.
+        // If we get an error parsing the flags, we have too little info to
+        // return a FormErr; we could just copy the bad flags but technically a
+        // FormErr indicates an issue with the query, not the flags.
         flags = DnsFlags::from_bytes(&bytes[2..4])?;
         // Counts are next four u16s (big-endian)
         qd_count = bigendians::to_u16(&bytes[4..6]);
@@ -51,12 +51,13 @@ impl DnsPacket {
         ns_count = bigendians::to_u16(&bytes[8..10]);
         ar_count = bigendians::to_u16(&bytes[10..12]);
 
-        // The header was 12 bytes, we now begin reading the rest of the packet.  These components
-        // are variable length (thanks to how labels are encoded)
+        // The header was 12 bytes, we now begin reading the rest of the packet.
+        // These components are variable length (thanks to how labels are
+        // encoded)
         let mut pos: usize = 12;
         for _ in 0..qd_count {
-            // TODO(dylan): formerr logic is duplicated several times here, might be helpful to
-            // turn it into a macro
+            // TODO(dylan): formerr logic is duplicated several times here,
+            // might be helpful to turn it into a macro
             match DnsQuestion::from_bytes(&bytes, pos) {
                 Ok((question, new_pos)) => {
                     pos = new_pos;
