@@ -1,4 +1,4 @@
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 use super::{bigendians, names, DnsClass, DnsFormatError, DnsRRType};
 
@@ -24,14 +24,11 @@ pub struct DnsResourceRecord {
 pub enum RecordData {
     A(Ipv4Addr),
     NS(Vec<String>),
+    AAAA(Ipv6Addr),
     Other(Vec<u8>),
 }
 
 impl DnsResourceRecord {
-    // XXX EDNS OPT records are special and for now usually cause this program to panic.
-    // Specifically, OPT rewrites what the "class" field should contain; it becomes the
-    // UDP payload size instead of the Class ENUM. If we try to cast it from primitive, we
-    // wind up erroring (unless it's exactly 254 or 255 bytes)
     pub fn from_bytes(
         packet_bytes: &[u8],
         mut pos: usize,
@@ -77,6 +74,16 @@ impl DnsResourceRecord {
                 record_bytes[2],
                 record_bytes[3],
             )),
+            DnsRRType::AAAA => RecordData::AAAA(Ipv6Addr::new(
+                bigendians::to_u16(&record_bytes[0..2]),
+                bigendians::to_u16(&record_bytes[2..4]),
+                bigendians::to_u16(&record_bytes[4..6]),
+                bigendians::to_u16(&record_bytes[6..8]),
+                bigendians::to_u16(&record_bytes[8..10]),
+                bigendians::to_u16(&record_bytes[10..12]),
+                bigendians::to_u16(&record_bytes[12..14]),
+                bigendians::to_u16(&record_bytes[14..16]),
+            )),
             DnsRRType::NS => {
                 let (name, _) = names::deserialize_name(&packet_bytes, pos)?;
                 RecordData::NS(name)
@@ -108,6 +115,7 @@ impl DnsResourceRecord {
 
         match &self.record {
             RecordData::A(ipv4) => bytes.extend_from_slice(&ipv4.octets()),
+            RecordData::AAAA(ipv6) => bytes.extend_from_slice(&ipv6.octets()),
             RecordData::NS(labels) => bytes.extend_from_slice(&mut names::serialize_name(labels)),
             RecordData::Other(record_bytes) => bytes.extend_from_slice(&record_bytes),
         }
