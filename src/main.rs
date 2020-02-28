@@ -1,5 +1,7 @@
 use std::error;
 use std::net;
+use std::sync::Arc;
+use std::thread;
 
 mod dns;
 
@@ -11,19 +13,8 @@ use dns::recursive;
 // but has the drawback that we can't statically determine what is in the box.
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
-// Main server thread entry point. Listens for a connection on
-// localhost (127.0.0.1) UDP port 5300 and reads up to 500 bytes
-fn listen_once() -> Result<()> {
-    // First, open the UDP socket
-    println!("Listening for UDP connection");
-    let socket = net::UdpSocket::bind("127.0.0.1:5300")?;
-
-    // Receive data from the user.
-    // TODO(dylan): Up MTU, consider using an alloc here
-    let mut buf = [0; 500];
-    let (amt, src) = socket.recv_from(&mut buf)?;
-    println!("Data received: {} bytes", amt);
-
+// Main server thread entry point. Creates a response to a received query.
+fn resolve_query(buf: [u8; 1500], amt: usize) -> Result<protocol::DnsPacket> {
     // Process the DNS packet received and print out some data from it
     let packet = match protocol::DnsPacket::from_bytes(&buf[..amt]) {
         Ok(x) => Ok(x),
@@ -31,9 +22,8 @@ fn listen_once() -> Result<()> {
             println!("Invalid format!");
             match e.get_error_response() {
                 Some(response) => {
-                    let response_bytes = &response.to_bytes();
                     println!("Returning response {:?}", response);
-                    socket.send_to(&response_bytes, &src)?;
+                    return Ok(response);
                 }
                 None => {
                     println!("Not enough info to build a response, dropping connection");
@@ -65,14 +55,47 @@ fn listen_once() -> Result<()> {
     // Set the RA bit TODO this should probably be owned by the resolver code
     results.flags.ra_bit = true;
 
-    // Send the results back to the client
-    println!("Returning results: {:?}", results);
-    let response_bytes = &results.to_bytes();
-    socket.send_to(&response_bytes, &src)?;
+    Ok(results)
+}
 
+// Listen on localhost (127.0.0.1) UDP port 5300 and reads up to 1500 bytes
+fn receive(socket: &net::UdpSocket) -> Result<([u8; 1500], usize, std::net::SocketAddr)> {
+    // Receive data from the user.
+    // TODO(dylan): Up MTU, consider using an alloc here
+    let mut buf = [0; 1500];
+    let (amt, src) = socket.recv_from(&mut buf)?;
+    println!("Data received: {} bytes", amt);
+
+    Ok((buf, amt, src))
+}
+
+fn respond(
+    socket: &net::UdpSocket,
+    packet: &protocol::DnsPacket,
+    dest: std::net::SocketAddr,
+) -> Result<()> {
+    // Send the results back to the client
+    println!("Returning results: {:?}", packet);
+    let response_bytes = &packet.to_bytes();
+    socket.send_to(&response_bytes, dest)?;
     Ok(())
 }
 
 fn main() -> Result<()> {
-    listen_once()
+    let socket = Arc::new(net::UdpSocket::bind("127.0.0.1:5300")?);
+    loop {
+        let (buf, amt, client) = receive(&socket)?;
+        let sock_ref = Arc::clone(&socket);
+        let responder = thread::spawn(move || {
+            let response = resolve_query(buf, amt);
+            match response {
+                Ok(response) => {
+                    respond(&sock_ref, &response, client).unwrap();
+                }
+                Err(error) => {
+                    println!("Error processing response! {:?}", error);
+                }
+            }
+        });
+    }
 }
