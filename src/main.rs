@@ -1,7 +1,8 @@
 use std::error;
 use std::net;
-use std::sync::Arc;
 use std::thread;
+
+use socket2::{Domain, Socket, Type};
 
 mod dns;
 
@@ -82,15 +83,19 @@ fn respond(
 }
 
 fn main() -> Result<()> {
-    let socket = Arc::new(net::UdpSocket::bind("127.0.0.1:5300")?);
     loop {
+        // Open a socket for this listener
+        let socket = Socket::new(Domain::ipv4(), Type::dgram(), None)?;
+        socket.set_reuse_port(true)?;
+        socket.bind(&"127.0.0.1:5300".parse::<net::SocketAddr>().unwrap().into())?;
+        let socket = socket.into_udp_socket();
+
         let (buf, amt, client) = receive(&socket)?;
-        let sock_ref = Arc::clone(&socket);
-        let responder = thread::spawn(move || {
+        thread::spawn(move || {
             let response = resolve_query(&buf[0..amt]);
             match response {
                 Ok(response) => {
-                    respond(&sock_ref, &response, client).unwrap();
+                    respond(&socket, &response, client).unwrap();
                 }
                 Err(error) => {
                     println!("Error processing response! {:?}", error);

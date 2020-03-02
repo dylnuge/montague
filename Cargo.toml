@@ -8,3 +8,4 @@ edition = "2018"
 num = "0.2.0"
 num-derive = "0.2.5"
 num-traits = "0.2.8"
+socket2 = { version = "0.3.11", features = ["reuseport"] }
