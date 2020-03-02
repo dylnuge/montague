@@ -14,9 +14,9 @@ use dns::recursive;
 type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
 // Main server thread entry point. Creates a response to a received query.
-fn resolve_query(buf: [u8; 1500], amt: usize) -> Result<protocol::DnsPacket> {
+fn resolve_query(buf: &[u8]) -> Result<protocol::DnsPacket> {
     // Process the DNS packet received and print out some data from it
-    let packet = match protocol::DnsPacket::from_bytes(&buf[..amt]) {
+    let packet = match protocol::DnsPacket::from_bytes(buf) {
         Ok(x) => Ok(x),
         Err(e) => {
             println!("Invalid format!");
@@ -61,7 +61,7 @@ fn resolve_query(buf: [u8; 1500], amt: usize) -> Result<protocol::DnsPacket> {
 // Listen on localhost (127.0.0.1) UDP port 5300 and reads up to 1500 bytes
 fn receive(socket: &net::UdpSocket) -> Result<([u8; 1500], usize, std::net::SocketAddr)> {
     // Receive data from the user.
-    // TODO(dylan): Up MTU, consider using an alloc here
+    // TODO(dylan): Up to an MTU of 1500, consider using an alloc here
     let mut buf = [0; 1500];
     let (amt, src) = socket.recv_from(&mut buf)?;
     println!("Data received: {} bytes", amt);
@@ -87,7 +87,7 @@ fn main() -> Result<()> {
         let (buf, amt, client) = receive(&socket)?;
         let sock_ref = Arc::clone(&socket);
         let responder = thread::spawn(move || {
-            let response = resolve_query(buf, amt);
+            let response = resolve_query(&buf[0..amt]);
             match response {
                 Ok(response) => {
                     respond(&sock_ref, &response, client).unwrap();
