@@ -73,15 +73,17 @@ fn find_glue_record_for_ns(
     ns: &DnsResourceRecord,
     records: &Vec<DnsResourceRecord>,
 ) -> Option<IpAddr> {
+    let ns_name = match &ns.record {
+        RecordData::NS(name) => name,
+        _ => panic!("NS record data is not stored properly"),
+    };
+
     for rr in records {
-        let ns_name = match &ns.record {
-            RecordData::NS(name) => name,
-            _ => panic!("NS record data is not stored properly"),
-        };
-        // TODO(dylan): Right now we only support running our queries over IPv4. v6
-        // shouldn't be too hard to add in, though.
-        if rr.rr_type == DnsRRType::A && &rr.name == ns_name {
-            return Some(IpAddr::V4(rr.get_a_ip()));
+        if &rr.name == ns_name {
+            match rr.record {
+                RecordData::A(ip_addr) => return Some(IpAddr::V4(ip_addr)),
+                _ => (),
+            }
         }
     }
     return None;
