@@ -1,7 +1,7 @@
 use num_derive::FromPrimitive;
 
 #[allow(dead_code)]
-#[derive(FromPrimitive, Clone, PartialEq, Debug)]
+#[derive(FromPrimitive, Clone, Copy, PartialEq, Debug)]
 pub enum DnsRRType {
     // There are a lot of these: I've copied them from the IANA list
     // programmatically, but we'll focus on the most common records to implement

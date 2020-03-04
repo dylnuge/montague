@@ -34,9 +34,9 @@ pub fn resolve_question(question: &DnsQuestion) -> Result<DnsPacket, Box<dyn Err
             .into());
         };
 
-        // If we got answers, we're done!
+        // If we got answers, we move on to answer handling!
         if response.answers.len() > 0 {
-            return Ok(response);
+            return handle_answers(response);
         }
 
         // Without an answer, we need to look at the next authority to query. Per RFC 1034, it's
@@ -67,6 +67,39 @@ pub fn resolve_question(question: &DnsQuestion) -> Result<DnsPacket, Box<dyn Err
             }
         }
     }
+}
+
+fn handle_answers(mut response: DnsPacket) -> Result<DnsPacket, Box<dyn Error>> {
+    // If our answers have a CNAME, we have to (recursively) go lookup the CNAME too. If it has
+    // multiple CNAMEs, or a CNAME and other records, it's breaking the spec; we'll just ignore
+    // that case right now, though we might want to return a FORMERR or something?
+    if response.answers.len() == 1 {
+        match &response.answers[0].record {
+            RecordData::CNAME(labels) => {
+                // We're asking a question for the canonical name, now. Class and type stay the
+                // same.
+                let question = DnsQuestion {
+                    qname: labels.to_owned(),
+                    // It should be safe to assume there's one and only one question here, though
+                    // we may want to assert it, since a bad server could strip questions or
+                    // something else weird.
+                    qclass: response.questions[0].qclass,
+                    qtype: response.questions[0].qtype,
+                };
+                // Note that resolve_question calls this function, so if our reply has another
+                // CNAME in it, that will be handled before it's returned back to us
+                let reply = resolve_question(&question)?;
+
+                // We add the answers, nameservers, and additional records from the CNAME reply to
+                // our original answer, but we don't change the question
+                response.answers.extend(reply.answers);
+                response.nameservers.extend(reply.nameservers);
+                response.addl_recs.extend(reply.addl_recs);
+            }
+            _ => (),
+        }
+    }
+    Ok(response)
 }
 
 fn find_glue_record_for_ns(

@@ -7,6 +7,7 @@ pub enum RecordData {
     A(Ipv4Addr),
     NS(Vec<String>),
     AAAA(Ipv6Addr),
+    CNAME(Vec<String>),
     Other(Vec<u8>),
 }
 
@@ -39,6 +40,10 @@ impl RecordData {
                 let (name, _) = names::deserialize_name(&packet_bytes, pos)?;
                 RecordData::NS(name)
             }
+            DnsRRType::CNAME => {
+                let (name, _) = names::deserialize_name(&packet_bytes, pos)?;
+                RecordData::CNAME(name)
+            }
             _ => RecordData::Other(record_bytes),
         };
         pos += rd_length as usize;
@@ -51,6 +56,7 @@ impl RecordData {
             RecordData::A(ipv4) => ipv4.octets().to_vec(),
             RecordData::AAAA(ipv6) => ipv6.octets().to_vec(),
             RecordData::NS(labels) => names::serialize_name(&labels),
+            RecordData::CNAME(labels) => names::serialize_name(&labels),
             RecordData::Other(record_bytes) => record_bytes.to_vec(),
         }
     }

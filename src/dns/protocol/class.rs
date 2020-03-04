@@ -1,5 +1,5 @@
 #[allow(dead_code)]
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum DnsClass {
     // 0: Reserved (RFC 6895)
     // 1: INternet - Basically the only actually used DNS Class
