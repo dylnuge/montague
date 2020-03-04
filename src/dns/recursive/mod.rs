@@ -6,8 +6,8 @@ use std::error::Error;
 use std::net::{IpAddr, UdpSocket};
 
 use super::protocol::{
-    DnsClass, DnsFlags, DnsOpcode, DnsPacket, DnsQuestion, DnsRCode, DnsRRType, DnsResourceRecord,
-    RecordData,
+    DnsClass, DnsFlags, DnsOpcode, DnsPacket, DnsQuestion, DnsRCode, DnsRRType, DnsRecordData,
+    DnsResourceRecord,
 };
 
 // Right now this doesn't use caching, doesn't try another nameserver if one fails, and a lot of
@@ -75,7 +75,7 @@ fn handle_answers(mut response: DnsPacket) -> Result<DnsPacket, Box<dyn Error>> 
     // that case right now, though we might want to return a FORMERR or something?
     if response.answers.len() == 1 {
         match &response.answers[0].record {
-            RecordData::CNAME(labels) => {
+            DnsRecordData::CNAME(labels) => {
                 // We're asking a question for the canonical name, now. Class and type stay the
                 // same.
                 let question = DnsQuestion {
@@ -107,14 +107,14 @@ fn find_glue_record_for_ns(
     records: &Vec<DnsResourceRecord>,
 ) -> Option<IpAddr> {
     let ns_name = match &ns.record {
-        RecordData::NS(name) => name,
+        DnsRecordData::NS(name) => name,
         _ => panic!("NS record data is not stored properly"),
     };
 
     for rr in records {
         if &rr.name == ns_name {
             match rr.record {
-                RecordData::A(ip_addr) => return Some(IpAddr::V4(ip_addr)),
+                DnsRecordData::A(ip_addr) => return Some(IpAddr::V4(ip_addr)),
                 _ => (),
             }
         }
@@ -127,7 +127,7 @@ fn get_nameserver_address(ns: &DnsResourceRecord) -> Result<IpAddr, Box<dyn Erro
     // can happen if we're asked to talk to, for instance, "ns.example.com" to find out where
     // "example.com" is. We'll keep repeating the same NS lookup over and over.
     let ns_name = match &ns.record {
-        RecordData::NS(name) => name,
+        DnsRecordData::NS(name) => name,
         _ => panic!("NS record data is not stored properly"),
     };
     let question = DnsQuestion {
@@ -142,7 +142,7 @@ fn get_nameserver_address(ns: &DnsResourceRecord) -> Result<IpAddr, Box<dyn Erro
     for answer in &result.answers {
         if answer.rr_type == DnsRRType::A {
             match answer.record {
-                RecordData::A(addr) => return Ok(IpAddr::V4(addr)),
+                DnsRecordData::A(addr) => return Ok(IpAddr::V4(addr)),
                 _ => continue,
             }
         }

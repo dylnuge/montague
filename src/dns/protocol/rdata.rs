@@ -3,7 +3,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use super::{bigendians, names, DnsFormatError, DnsRRType};
 
 #[derive(Clone, PartialEq, Debug)]
-pub enum RecordData {
+pub enum DnsRecordData {
     A(Ipv4Addr),
     NS(Vec<String>),
     AAAA(Ipv6Addr),
@@ -11,22 +11,22 @@ pub enum RecordData {
     Other(Vec<u8>),
 }
 
-impl RecordData {
+impl DnsRecordData {
     pub fn from_bytes(
         packet_bytes: &[u8],
         mut pos: usize,
         rr_type: &DnsRRType,
         rd_length: u16,
-    ) -> Result<(RecordData, usize), DnsFormatError> {
+    ) -> Result<(DnsRecordData, usize), DnsFormatError> {
         let record_bytes = packet_bytes[pos..pos + (rd_length as usize)].to_vec();
         let record = match rr_type {
-            DnsRRType::A => RecordData::A(Ipv4Addr::new(
+            DnsRRType::A => DnsRecordData::A(Ipv4Addr::new(
                 record_bytes[0],
                 record_bytes[1],
                 record_bytes[2],
                 record_bytes[3],
             )),
-            DnsRRType::AAAA => RecordData::AAAA(Ipv6Addr::new(
+            DnsRRType::AAAA => DnsRecordData::AAAA(Ipv6Addr::new(
                 bigendians::to_u16(&record_bytes[0..2]),
                 bigendians::to_u16(&record_bytes[2..4]),
                 bigendians::to_u16(&record_bytes[4..6]),
@@ -38,13 +38,13 @@ impl RecordData {
             )),
             DnsRRType::NS => {
                 let (name, _) = names::deserialize_name(&packet_bytes, pos)?;
-                RecordData::NS(name)
+                DnsRecordData::NS(name)
             }
             DnsRRType::CNAME => {
                 let (name, _) = names::deserialize_name(&packet_bytes, pos)?;
-                RecordData::CNAME(name)
+                DnsRecordData::CNAME(name)
             }
-            _ => RecordData::Other(record_bytes),
+            _ => DnsRecordData::Other(record_bytes),
         };
         pos += rd_length as usize;
 
@@ -53,11 +53,11 @@ impl RecordData {
 
     pub fn to_bytes(&self) -> Vec<u8> {
         match &self {
-            RecordData::A(ipv4) => ipv4.octets().to_vec(),
-            RecordData::AAAA(ipv6) => ipv6.octets().to_vec(),
-            RecordData::NS(labels) => names::serialize_name(&labels),
-            RecordData::CNAME(labels) => names::serialize_name(&labels),
-            RecordData::Other(record_bytes) => record_bytes.to_vec(),
+            DnsRecordData::A(ipv4) => ipv4.octets().to_vec(),
+            DnsRecordData::AAAA(ipv6) => ipv6.octets().to_vec(),
+            DnsRecordData::NS(labels) => names::serialize_name(&labels),
+            DnsRecordData::CNAME(labels) => names::serialize_name(&labels),
+            DnsRecordData::Other(record_bytes) => record_bytes.to_vec(),
         }
     }
 }

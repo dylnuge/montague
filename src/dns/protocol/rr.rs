@@ -1,4 +1,4 @@
-use super::{bigendians, names, DnsClass, DnsFormatError, DnsRRType, RecordData};
+use super::{bigendians, names, DnsClass, DnsFormatError, DnsRRType, DnsRecordData};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct DnsResourceRecord {
@@ -13,7 +13,7 @@ pub struct DnsResourceRecord {
     pub ttl: u32,
     // Record data: variably interpreted depending on RR type. For now, just
     // store it as a byte vector
-    pub record: RecordData,
+    pub record: DnsRecordData,
 }
 
 impl DnsResourceRecord {
@@ -53,7 +53,7 @@ impl DnsResourceRecord {
             }?
         };
 
-        let (record, pos) = RecordData::from_bytes(packet_bytes, pos, &rr_type, rd_length)?;
+        let (record, pos) = DnsRecordData::from_bytes(packet_bytes, pos, &rr_type, rd_length)?;
         let rr = DnsResourceRecord {
             name,
             rr_type,

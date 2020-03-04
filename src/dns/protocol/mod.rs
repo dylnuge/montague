@@ -22,6 +22,6 @@ pub use opcode::DnsOpcode;
 pub use packet::DnsPacket;
 pub use question::DnsQuestion;
 pub use rcode::DnsRCode;
-pub use rdata::RecordData;
+pub use rdata::DnsRecordData;
 pub use rr::DnsResourceRecord;
 pub use rrtype::DnsRRType;
