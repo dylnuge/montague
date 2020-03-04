@@ -14,6 +14,10 @@ pub struct DnsResourceRecord {
     // this is signed in some sections, this is corrected in errata.
     pub ttl: u32,
     // Record length: tells us how long the data in record data is
+    // TODO: Remove this from the packet; it's not always correct to store in memory (e.g. RRs that
+    // contain labels might have a different length when re-serialized based on label compression),
+    // and beyond that, it should be computable from or stored with the RecordData. Leaving right
+    // now because RecordData is still woefully incomplete.
     pub rd_length: u16,
     // Record data: variably interpreted depending on RR type. For now, just
     // store it as a byte vector
@@ -105,21 +109,38 @@ impl DnsResourceRecord {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
+        // Some of these copies feel unnecessary; the issue is that though a RR object already has
+        // the exact bytes for, say, an A record, it doesn't for records which contain a DNS name.
+        // One option would be to _special case_ those records; i.e. detect if we're in a "just use
+        // a reference" case and only alloc/copy data here if we need to. I'm not convinced the
+        // complexity of the code would be worth saving, like, one 16 byte copy per AAAA record.
+        let record: Vec<u8> = match &self.record {
+            RecordData::A(ipv4) => ipv4.octets().to_vec(),
+            RecordData::AAAA(ipv6) => ipv6.octets().to_vec(),
+            RecordData::NS(labels) => names::serialize_name(&labels),
+            RecordData::Other(record_bytes) => record_bytes.to_vec(),
+        };
 
+        // Bounds check that the record isn't too large to fit in a u16.
+        let record_length = if record.len() <= std::u16::MAX as usize {
+            record.len() as u16
+        } else {
+            // There's not a way for our server to _receive_ a record this large, but this isn't
+            // theoretically impossible to happen; if we got a record that contained a very long
+            // DNS name, but was shorter because of label compression, we might "wind up" with a
+            // super long one. Of course, that would already be well beyond the name length limits
+            // in RFC 1035, which limit a name to 255 bytes, but "malicious authority input causes
+            // this panic" is not, like, totally impossible.
+            panic!("ResourceRecord of size {} is too large to be transmitted. This is almost certainly an error with this server and not the record.", record.len());
+        };
+
+        let mut bytes = Vec::new();
         bytes.append(&mut names::serialize_name(&self.name));
         bytes.extend_from_slice(&bigendians::from_u16(self.rr_type.to_owned() as u16));
         bytes.extend_from_slice(&bigendians::from_u16(self.class.to_u16()));
         bytes.extend_from_slice(&bigendians::from_u32(self.ttl));
-        bytes.extend_from_slice(&bigendians::from_u16(self.rd_length));
-
-        match &self.record {
-            RecordData::A(ipv4) => bytes.extend_from_slice(&ipv4.octets()),
-            RecordData::AAAA(ipv6) => bytes.extend_from_slice(&ipv6.octets()),
-            RecordData::NS(labels) => bytes.extend_from_slice(&mut names::serialize_name(labels)),
-            RecordData::Other(record_bytes) => bytes.extend_from_slice(&record_bytes),
-        }
-
+        bytes.extend_from_slice(&bigendians::from_u16(record_length));
+        bytes.extend_from_slice(&record);
         bytes
     }
 
