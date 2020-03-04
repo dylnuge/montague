@@ -11,12 +11,6 @@ pub struct DnsResourceRecord {
     // cache this answer for. 0 means not to cache. Note that RFC 1035 states
     // this is signed in some sections, this is corrected in errata.
     pub ttl: u32,
-    // Record length: tells us how long the data in record data is
-    // TODO: Remove this from the packet; it's not always correct to store in memory (e.g. RRs that
-    // contain labels might have a different length when re-serialized based on label compression),
-    // and beyond that, it should be computable from or stored with the RecordData. Leaving right
-    // now because RecordData is still woefully incomplete.
-    pub rd_length: u16,
     // Record data: variably interpreted depending on RR type. For now, just
     // store it as a byte vector
     pub record: RecordData,
@@ -65,7 +59,6 @@ impl DnsResourceRecord {
             rr_type,
             class,
             ttl,
-            rd_length,
             record,
         };
 
