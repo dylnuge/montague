@@ -15,19 +15,21 @@ understand DNS better. It's not intended for use in production environments.
 
 ## Functionality
 
-Current functionality is mostly limited to protocol functionality. The dns crate
-is capable of parsing and serializing DNS requests so long as they can fit in a
-single transmission packet (do not require truncation) and don't contain EDNS
-OPT records (because of no handling for the overloaded `class` header uint).
+Current functionality is mostly limited to protocol functionality and basic
+recursive resolution. The dns crate is capable of parsing and serializing DNS
+requests so long as they can fit in a single transmission packet (do not require
+truncation); TCP DNS is not currently supported. The server handles recursive
+resolution but does not do any DNSSEC checks and does not currently have any
+cache (each request to it will trigger a full set of authority lookups).
 
 ### Future Features
 
 - [ ] Expand DNS protocol library functionality
-  - [ ] Support OPT (EDNS) records ([RFC6891](https://tools.ietf.org/html/rfc6891))
+  - [x] Support OPT (EDNS) records ([RFC6891](https://tools.ietf.org/html/rfc6891))
   - [ ] Compress names using label pointers in responses
 - [ ] Database (authoritative resolver) functionality
   - [ ] Support reading authoritative records from DNS zone files
-- [ ] Recursive resolver functionality
+- [x] Recursive resolver functionality
 - [ ] Robust server functionality
 - [ ] Support DNSSEC extensions
 - [ ] Support DNS over HTTPS and/or DNS over TLS
